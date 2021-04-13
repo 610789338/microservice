@@ -3,11 +3,12 @@ package ms_framework
 import (
 	"net"
 	"fmt"
-	// "time"
+	"time"
 	"io"
 )
 
 type CLIENT_ID string
+type CONN_ID CLIENT_ID
 
 // type NetClient interface {
 // 	handleRead()
@@ -16,27 +17,32 @@ type CLIENT_ID string
 
 var RECV_BUF_MAX_LEN uint32 = 1024*1024  // 1M
 
-type TcpServer struct{
+type TcpServer struct {
 	ip 			string
 	port 		int
 	listener 	net.Listener
 	clients  	map[CLIENT_ID]*TcpClient
 }
 
-type TcpClient struct{
+type TcpClient struct {
 	id 				CLIENT_ID
 	conn			net.Conn
 	server 			*TcpServer
 	recvBuf 		[]byte
 	remainLen 		uint32
 	exit 			bool
+	lastActiveTime  int64
 }
 
 func GetClientID(c net.Conn) CLIENT_ID {
-	return CLIENT_ID(c.RemoteAddr().String())
+	return CLIENT_ID(GetConnID(c))
 }
 
-func (s *TcpServer) Start(){
+func GetConnID(c net.Conn) CONN_ID {
+	return CONN_ID(c.RemoteAddr().String())
+}
+
+func (s *TcpServer) Start() {
 	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.ip, s.port))
 	if err != nil {
 		panic(fmt.Sprintf("CreateTcpServer error %s:%d - %v", s.ip, s.port, err))
@@ -67,7 +73,7 @@ func (s *TcpServer) Start(){
 			remainLen: 0,
 			exit: false,
 		}
-		go s.clients[cID].handleRead()
+		go s.clients[cID].HandleRead()
 	}
 }
 
@@ -86,45 +92,69 @@ func (s *TcpServer) onClientClose(c *TcpClient){
 	delete(s.clients, GetClientID(c.conn))
 }
 
-func (c *TcpClient) handleRead() {
+func (c *TcpClient) HeartBeat() {
+	
+}
+
+func (c *TcpClient) HandleRead() {
 	defer func() {
 		INFO_LOG("tcp client close %v", c.conn.RemoteAddr())
 		c.Close()
 	} ()
 
 	for !c.exit {
-		// c.conn.SetReadDeadline(time.Now().Add(100*time.Millisecond))
-		len, err := c.conn.Read(c.recvBuf[c.remainLen:])
-		if err != nil && err != io.EOF {
-			ERROR_LOG("read error %v", err)
-			c.exit = true
-			continue
+		c.conn.SetReadDeadline(time.Now().Add(100*time.Millisecond))
+		rLen, err := c.conn.Read(c.recvBuf[c.remainLen:])
+		if err != nil {
+			e, ok := err.(*net.OpError)
+			if ok && e.Timeout() == true {
+				// WARN_LOG("read timeout %v", err)
+				continue
+			}
+
+			if err != io.EOF {
+				ERROR_LOG("read error %v", err)
+				break
+			}
 		}
 
-		if 0 == len {
+		if 0 == rLen {
 			// remote close
 			INFO_LOG("tcp connection close by remote %v %v", c.conn.RemoteAddr(), err)
-			c.exit = true
-			continue
+			break
 		}
 
-		c.remainLen += uint32(len)
+		c.lastActiveTime = GetNowTimestamp()
+
+		c.remainLen += uint32(rLen)
 		if c.remainLen > RECV_BUF_MAX_LEN/2 {
 			WARN_LOG("tcp connection buff cache too long!!! %dk > %dk", c.remainLen/1024, RECV_BUF_MAX_LEN/1024)
 			
 		} else if c.remainLen > RECV_BUF_MAX_LEN {
 			ERROR_LOG("tcp connection buff cache overflow!!! %dk > %dk", c.remainLen/1024, RECV_BUF_MAX_LEN/1024)
-			c.exit = true
+			break
+		}
+
+		procLen, msgsRsp := rpcMgr.MessageDecode(c.recvBuf[:c.remainLen])
+		c.remainLen -= procLen
+		if c.remainLen < 0 {
+			ERROR_LOG("c.remainLen(%d) < 0 procLen(%d) @%s", c.remainLen, procLen, c.conn.RemoteAddr())
+			c.remainLen = 0
 			continue
 		}
 
-		dlen := rpcMgr.RpcParse(c.recvBuf[:c.remainLen])
-		c.remainLen -= dlen
-		if c.remainLen < 0 {
-			ERROR_LOG("c.remainLen(%d) < 0 dlen(%d)", c.remainLen, dlen)
-		}
+		copy(c.recvBuf, c.recvBuf[procLen: procLen + c.remainLen])
 
-		copy(c.recvBuf, c.recvBuf[dlen:dlen+c.remainLen])
+		if len(msgsRsp) != 0 {
+			wLen, err := c.conn.Write(msgsRsp)
+			if err != nil {
+				ERROR_LOG("write %v error %v", c.conn.RemoteAddr(), err)
+			}
+
+			if wLen != len(msgsRsp) {
+				WARN_LOG("write len(%v) != msgsRsp len(%v) @%v", wLen, len(msgsRsp), c.conn.RemoteAddr())
+			}
+		}
 	}
 }
 
@@ -132,8 +162,8 @@ func (c *TcpClient) Close() {
 	c.server.onClientClose(c)
 }
 
-func CreateTcpServer(ip string, port int) *TcpServer {
-	tcpServer := TcpServer{ip: "127.0.0.1", port: 6666, clients: make(map[CLIENT_ID]*TcpClient)}
+func CreateTcpServer(_ip string, _port int) *TcpServer {
+	tcpServer := TcpServer{ip: _ip, port: _port, clients: make(map[CLIENT_ID]*TcpClient)}
 
 	return &tcpServer
 }

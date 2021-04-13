@@ -1,55 +1,26 @@
 package main
 
 import (
-	"net"
-	"fmt"
 	msf "ms_framework"
 	"time"
+	"clientsdk"
 )
 
-
-var rpcMgr = msf.CreateSimpleRpcMgr()
-
-func rpcCall(c net.Conn, rpcName string, args ...interface{}) {
-
-	b := rpcMgr.RpcEncode(rpcName, args...)
-
-	len := uint32(len(b))
-	ret := make([]byte, msf.PACKAGE_SIZE_LEN + len)
-	msf.WritePacketLen(ret, len)
-
-	copy(ret[msf.PACKAGE_SIZE_LEN:], b)
-
-	wLen, err := c.Write(ret)
-	if err != nil {
-		msf.ERROR_LOG("write %v error %v", c.RemoteAddr(), err)
-	}
-
-	msf.INFO_LOG("write %s success %d", rpcName, wLen)
-}
-
 func main() {
-	ip := "127.0.0.1"
-	port := 6666
-	c, err := net.Dial("tcp", fmt.Sprintf("%s:%d", ip, port))
-	if err != nil {
-		msf.ERROR_LOG("connect %s:%d error %v", ip, port, err)
-		return
-	}
-
-	msf.INFO_LOG("connect %s:%d success %v", ip, port, c)
-
+	clientsdk.Init()
+	gate := clientsdk.CreateGateProxy("127.0.0.1", 8888)
+	TestService := gate.CreateServiceProxy("", "testService")
+	methodName := "rpc_test"
 	for true {
-		m := make(map[string]interface{})
-		m["key1"] = 10
-		m["key2"] = "def"
+		TestService.RpcCall(methodName, 10, float32(9.9), "abc", map[string]interface{}{"key1": 10, "key2": "def"}, []int32{123, 456}, 
+		func(err string, reply map[string]interface{}) {
+			msf.INFO_LOG("%s response: %v %v", methodName, err, reply)
+		})
 
-		l := make([]int32)
-		l = l.append(123)
-
-		rpcCall(c, "rpc_test", 10, float32(9.9), "abc", m, l)
 		time.Sleep(time.Second)
 	}
-	// rpcCall(c, "rpc_test", 666)
-	// time.Sleep(time.Second)
+	// TestService.RpcCall(methodName, 10, float32(9.9), "abc", map[string]interface{}{"key1": 10, "key2": "def"}, []int32{123, 456}, 
+	// func(err string, reply map[string]interface{}) {
+	// 	msf.INFO_LOG("%s response: %v %v", methodName, err, reply)
+	// })
 }

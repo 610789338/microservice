@@ -9,31 +9,13 @@ import (
 )
 
 
-type RpcTestReq struct {
-	I 	uint32
-	F 	float32
-	S 	string
-	M   map[string]interface{}
-	L   []int32
-}
+func main() {
+	
+	msf.Init("127.0.0.1", 8888)
+	msf.RegistRpcHandler(msf.MSG_C2G_RPC_ROUTE, 	func() msf.RpcHandler {return new(RpcC2GRpcRouteHandler)})
+	msf.RegistRpcHandler(msf.MSG_COMMON_RSP, 		func() msf.RpcHandler {return new(RpcS2GCommonRspHandler)})
 
-type RpcTestRsp struct {
-	Success 	bool
-}
+	msf.OnRemoteDiscover("", "testService", "127.0.0.1", 6666)
 
-type RpcTestHandler struct {
-	req 	RpcTestReq
-	rsp 	RpcTestRsp
-}
-
-func (r *RpcTestHandler) GetReqPtr() interface{} {return &(r.req)}
-func (r *RpcTestHandler) GetRspPtr() interface{} {return &(r.rsp)}
-
-func (r *RpcTestHandler) Process() {
-	msf.INFO_LOG("RpcTestHandler %+v", *r)
-}
-
-func main(){
-	msf.RegistRpcHandler("rpc_test", &RpcTestHandler{})
 	msf.Start()
 }

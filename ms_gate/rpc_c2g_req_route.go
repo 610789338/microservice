@@ -2,6 +2,7 @@ package main
 
 import (
 	msf "ms_framework"
+	"fmt"
 )
 
 
@@ -17,6 +18,7 @@ type RpcC2GRpcRouteRsp struct {
 	Error 			string
 	Reply   		map[string]interface{}
 }
+func (*RpcC2GRpcRouteRsp) DecodeWithoutFieldName(){}
 
 type RpcC2GRpcRouteHandler struct {
 	req 	RpcC2GRpcRouteReq
@@ -37,15 +39,17 @@ func (r *RpcC2GRpcRouteHandler) Process() {
 	// * 生成GRid，并建立GRid <-> clientID:Rid的对应关系
 	// * 用GRid替换掉rpc中的rid
 
-	msf.INFO_LOG("RpcC2GRpcRouteHandler: %v", r.req)
-
 	remoteID := msf.GetRemoteID(r.req.NameSpace, r.req.Service)
 	remote := msf.ChoiceRemote(remoteID)
 
+	// error response
 	if nil == remote {
-		msf.ERROR_LOG("")
+		r.rsp = &RpcC2GRpcRouteRsp{Rid: r.req.Rid, Error: fmt.Sprintf("service[%s:%s] not exist", r.req.NameSpace, r.req.Service), Reply: nil}
 	}
 
-	// error response
-	r.rsp = &RpcC2GRpcRouteRsp{Rid: r.req.Rid, Error: "service not exist", Reply: nil}
+	if r.rsp != nil {
+		msf.ERROR_LOG("[RpcC2GRpcRouteHandler] - SERVICE - [%s:%s] rid[%v] response[%v]", r.req.NameSpace, r.req.Service, r.req.Rid, r.rsp.Error)
+	} else {
+		msf.DEBUG_LOG("[RpcC2GRpcRouteHandler] - SERVICE - [%s:%s] rid[%v] response[nil]", r.req.NameSpace, r.req.Service, r.req.Rid)
+	}
 }

@@ -17,6 +17,10 @@ var MSG_C2G_RPC_ROUTE 	= "a"  // client to gate rpc route
 var MSG_G2S_RPC_CALL 	= "b"  // gate to service rpc call
 var MSG_COMMON_RSP 		= "c"  // common response include s2g && g2c
 
+type decodeWithoutFieldName interface{
+	DecodeWithoutFieldName ()
+}
+
 func ReadPacketLen(buf []byte) uint32 {
 	return ReadUint32(buf)
 }
@@ -78,9 +82,8 @@ func (rmgr *SimpleRpcMgr) MessageDecode(buf []byte) (uint32, []byte) {
 			ERROR_LOG("packet size too long %d > %d", pkgLen, MAX_PACKET_SIZE)
 		} else {
 
-			reply := rmgr.RpcDecode(buf[offset: offset + pkgLen])
-			if reply != nil {
-				rsp := rmgr.RpcEncode(MSG_COMMON_RSP, reply)
+			rsp := rmgr.RpcDecode(buf[offset: offset + pkgLen])
+			if rsp != nil {
 				msgRsp := rmgr.MessageEncode(rsp)
 				msgsRsp = append(msgsRsp, msgRsp...)
 			}
@@ -92,7 +95,7 @@ func (rmgr *SimpleRpcMgr) MessageDecode(buf []byte) (uint32, []byte) {
 	return offset, msgsRsp
 }
 
-func (rmgr *SimpleRpcMgr) RpcDecode(b []byte) map[string]interface{} {
+func (rmgr *SimpleRpcMgr) RpcDecode(b []byte) []byte {
 
 	decoder := msgpack.NewDecoder(bytes.NewBuffer(b))
 
@@ -124,16 +127,28 @@ func (rmgr *SimpleRpcMgr) RpcDecode(b []byte) map[string]interface{} {
 		return nil
 	}
 
-	// TODO: 可以自定义rpc返回的格式
 	// for response
-	reply := make(map[string]interface{})
+	args := []interface{}{}
 	rspPtr := reflect.ValueOf(rpc.GetRspPtr())
-	stValue = rspPtr.Elem()
-	for i := 0; i < stValue.NumField(); i++ {
-		reply[stValue.Type().Field(i).Name] = stValue.Field(i).Interface()
+	switch rpc.GetRspPtr().(type) {
+
+	case decodeWithoutFieldName:
+		stValue = rspPtr.Elem()
+		for i := 0; i < stValue.NumField(); i++ {
+			args = append(args, stValue.Field(i).Interface())
+		}
+
+	default:
+		stMap := make(map[string]interface{})
+		stValue = rspPtr.Elem()
+		for i := 0; i < stValue.NumField(); i++ {
+			stMap[stValue.Type().Field(i).Name] = stValue.Field(i).Interface()
+		}
+
+		args = append(args, stMap)
 	}
 
-	return reply
+	return rmgr.RpcEncode(MSG_COMMON_RSP, args...)
 }
 
 func (rmgr *SimpleRpcMgr) MessageEncode(buf []byte) []byte {

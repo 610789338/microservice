@@ -20,17 +20,15 @@ var gCbChan chan []interface{}
 func CallBackMgr() {
 
 	for true {
+
 		elem := <- gCbChan
-
-		msf.DEBUG_LOG("CallBackMgr %v", elem)
-
 		oper := elem[0].(string)
 		if "add" == oper {
 			rid := elem[1].(uint32)
 			cb := CallBack(elem[2].(func(err string, result map[string]interface{})))
 
-			if len(gCbMap) > 100000 {
-				msf.ERROR_LOG("call back cache size %v > 10000", len(gCbMap))
+			if len(gCbMap) > 100 {
+				msf.ERROR_LOG("call back cache size %v > 100", len(gCbMap))
 				return
 			}
 
@@ -105,17 +103,6 @@ func (c *GateProxy) HandleRead() {
 }
 
 func (c *GateProxy) RpcCall(rpcName string, args ...interface{}) {
-	// var rid uint32 = 0
-	// if len(args) > 0 {
-	// 	lastArg := args[len(args)-1]
-	// 	t := reflect.TypeOf(lastArg)
-	// 	if t.Kind() == reflect.Func {
-	// 		rid = GenGid()
-	// 		gCbChan <- []interface{}{"add", rid, lastArg}
-	// 		args = args[:len(args)-1]
-	// 	}
-	// }
-
 	rpc := rpcMgr.RpcEncode(rpcName, args...)
 	msg := rpcMgr.MessageEncode(rpc)
 
@@ -128,7 +115,7 @@ func (c *GateProxy) RpcCall(rpcName string, args ...interface{}) {
 		msf.WARN_LOG("write len(%v) != msg len(%v) @%v", wLen, len(msg), c.conn.RemoteAddr())
 	}
 
-	msf.INFO_LOG("write %s success %d", rpcName, wLen)
+	// msf.DEBUG_LOG("write %s success %d", rpcName, wLen)
 }
 
 func CreateGateProxy(_ip string, _port int) *GateProxy {

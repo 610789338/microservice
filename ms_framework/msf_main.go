@@ -28,7 +28,7 @@ type RpcMgr interface {
 	RegistRpcHandler	(name string, gen RpcHanderGenerator)
 	MessageDecode		(buf []byte) (uint32, []byte)
 	MessageEncode		(b []byte) []byte
-	RpcDecode			(buf []byte) map[string]interface{}
+	RpcDecode			(buf []byte) []byte
 	RpcEncode			(name string, args ...interface{}) []byte
 }
 

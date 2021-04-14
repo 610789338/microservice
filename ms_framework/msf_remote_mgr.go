@@ -62,7 +62,7 @@ func (rmgr *RemoteMgr) OnRemoteDisappear(remoteID REMOTE_ID, connID CONN_ID) {
 }
 
 func (rmgr *RemoteMgr) ConnectRemote(namespace string, svrName string, ip string, port uint32) {
-	retryCnt := 10
+	retryCnt := 5
 	for true {
 		c, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", ip, port), time.Second)
 		if err != nil {

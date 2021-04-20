@@ -135,7 +135,7 @@ func (c *TcpClient) HandleRead() {
 			break
 		}
 
-		procLen, msgsRsp := rpcMgr.MessageDecode(c.recvBuf[:c.remainLen])
+		procLen, msgsRsp := rpcMgr.MessageDecode(c, c.recvBuf[:c.remainLen])
 		c.remainLen -= procLen
 		if c.remainLen < 0 {
 			ERROR_LOG("c.remainLen(%d) < 0 procLen(%d) @%s", c.remainLen, procLen, c.conn.RemoteAddr())
@@ -162,8 +162,32 @@ func (c *TcpClient) Close() {
 	c.server.onClientClose(c)
 }
 
-func CreateTcpServer(_ip string, _port int) *TcpServer {
-	tcpServer := TcpServer{ip: _ip, port: _port, clients: make(map[CLIENT_ID]*TcpClient)}
+func (c *TcpClient) Write(b []byte) (n int, err error){
+	n, err = c.conn.Write(b)
+	return
+}
 
-	return &tcpServer
+func (c *TcpClient) RemoteAddr() net.Addr {
+	return c.conn.RemoteAddr()
+}
+
+func (c *TcpClient) GetClientID() CLIENT_ID {
+	return GetClientID(c.conn)
+}
+
+var netServer *TcpServer = nil
+
+func CreateTcpServer(_ip string, _port int) {
+	netServer = &TcpServer{ip: _ip, port: _port, clients: make(map[CLIENT_ID]*TcpClient)}
+}
+
+func GetClient(clientID CLIENT_ID) *TcpClient {
+	// TODO: concurrent panic
+	client, ok := netServer.clients[clientID]
+	if !ok {
+		ERROR_LOG("client %v not exist", clientID)
+		return nil
+	}
+
+	return client
 }

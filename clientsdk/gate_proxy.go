@@ -4,48 +4,81 @@ import (
 	"net"
 	"fmt"
 	msf "ms_framework"
-	// "time"
+	"time"
 	"io"
 	"reflect"
 )
 
 // 单个实例唯一的gid
 var globalGID uint32 = 0
-var rpcMgr = msf.CreateSimpleRpcMgr()
+var rpcMgr *msf.SimpleRpcMgr = nil
 
 type CallBack func(err string, result map[string]interface{})
 var gCbMap map[uint32] CallBack
+var gCbMapMaxSize = 100
 var gCbChan chan []interface{}
+
+// 利用time.After实现callback的超时控制，避免gCbMap被撑爆
+func CallBackTimeOut(rid uint32) {
+	select {
+	case <- time.After(time.Second * 20):
+		gCbChan <- []interface{}{"get&del", rid, nil}
+	}
+}
 
 func CallBackMgr() {
 
 	for true {
-
 		elem := <- gCbChan
 		oper := elem[0].(string)
+
 		if "add" == oper {
 			rid := elem[1].(uint32)
 			cb := CallBack(elem[2].(func(err string, result map[string]interface{})))
 
-			if len(gCbMap) > 100 {
-				msf.ERROR_LOG("call back cache size %v > 100", len(gCbMap))
+			if len(gCbMap) >= gCbMapMaxSize {
+				msf.ERROR_LOG("call back cache size %v > %v", len(gCbMap), gCbMapMaxSize)
 				return
 			}
 
 			gCbMap[rid] = cb
-		} else if "del" == oper {
+
+			go CallBackTimeOut(rid)
+
+		} else if "get&del" == oper {
 			rid := elem[1].(uint32)
-			delete(gCbMap, rid)
+			cb, ok := gCbMap[rid]
+
+			cbChan := elem[2]
+			if ok {
+				if cbChan != nil {
+					cbChan.(chan interface{}) <- cb
+				}
+				delete(gCbMap, rid)
+
+			} else {
+				if cbChan != nil {
+					cbChan.(chan interface{}) <- nil
+					msf.ERROR_LOG("call back get error %v", rid)
+				}
+			}
 		}
 	}
 }
 
-func Init() {
+func CallBackMgrStart() {
 	gCbMap = make(map[uint32] CallBack)
 	gCbChan = make(chan []interface{})
-	rpcMgr.RegistRpcHandler(msf.MSG_COMMON_RSP, func() msf.RpcHandler {return new(RpcCommonRspHandler)})
-
 	go CallBackMgr()
+}
+
+func Init() {
+	CallBackMgrStart()
+
+	msf.CreateSimpleRpcMgr()
+	
+	rpcMgr = msf.GetRpcMgr()
+	rpcMgr.RegistRpcHandler(msf.MSG_COMMON_RSP, func() msf.RpcHandler {return new(RpcCommonRspHandler)})
 }
 
 type GateProxy struct {
@@ -90,7 +123,7 @@ func (c *GateProxy) HandleRead() {
 			break
 		}
 
-		procLen, _ := rpcMgr.MessageDecode(c.recvBuf[:c.remainLen])
+		procLen, _ := rpcMgr.MessageDecode(nil, c.recvBuf[:c.remainLen])
 		c.remainLen -= procLen
 		if c.remainLen < 0 {
 			msf.ERROR_LOG("c.remainLen(%d) < 0 procLen(%d) @%s", c.remainLen, procLen, c.conn.RemoteAddr())
@@ -114,8 +147,6 @@ func (c *GateProxy) RpcCall(rpcName string, args ...interface{}) {
 	if wLen != len(msg) {
 		msf.WARN_LOG("write len(%v) != msg len(%v) @%v", wLen, len(msg), c.conn.RemoteAddr())
 	}
-
-	// msf.DEBUG_LOG("write %s success %d", rpcName, wLen)
 }
 
 func CreateGateProxy(_ip string, _port int) *GateProxy {
@@ -151,7 +182,11 @@ type ServiceProxy struct {
 	ServiceName		string
 }
 
+// c2s的rpc调用，最后一个参数若是Func，则建立rid<->callback的缓存
 func (c *ServiceProxy) RpcCall(rpcName string, args ...interface{}) {
+
+	msf.DEBUG_LOG("rpc call %s args %v", rpcName, args)
+
 	var rid uint32 = 0
 	if len(args) > 0 {
 		lastArg := args[len(args)-1]

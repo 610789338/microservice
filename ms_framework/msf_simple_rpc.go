@@ -17,8 +17,8 @@ var MSG_C2G_RPC_ROUTE 	= "a"  // client to gate rpc route
 var MSG_G2S_RPC_CALL 	= "b"  // gate to service rpc call
 var MSG_COMMON_RSP 		= "c"  // common response include s2g && g2c
 
-type decodeWithoutFieldName interface{
-	DecodeWithoutFieldName ()
+type encodeWithoutFieldName interface{
+	EncodeWithoutFieldName ()
 }
 
 func ReadPacketLen(buf []byte) uint32 {
@@ -35,6 +35,12 @@ func ReadRid(buf []byte) uint32 {
 
 func WriteRid(buf []byte, v uint32) {
 	WriteUint32(buf, v)
+}
+
+type RpcHandler interface {
+	GetReqPtr() interface{}
+	GetRspPtr() interface{}
+	Process(c *TcpClient)
 }
 
 type RpcHanderGenerator func() RpcHandler
@@ -58,7 +64,7 @@ func (rmgr *SimpleRpcMgr) RegistRpcHandler(name string, gen RpcHanderGenerator) 
 	rmgr.rpcs[name] = gen
 }
 
-func (rmgr *SimpleRpcMgr) MessageDecode(buf []byte) (uint32, []byte) {
+func (rmgr *SimpleRpcMgr) MessageDecode(c *TcpClient, buf []byte) (uint32, []byte) {
 	var offset uint32 = 0
 	var msgsRsp []byte = []byte{}
 
@@ -82,7 +88,7 @@ func (rmgr *SimpleRpcMgr) MessageDecode(buf []byte) (uint32, []byte) {
 			ERROR_LOG("packet size too long %d > %d", pkgLen, MAX_PACKET_SIZE)
 		} else {
 
-			rsp := rmgr.RpcDecode(buf[offset: offset + pkgLen])
+			rsp := rmgr.RpcDecode(c, buf[offset: offset + pkgLen])
 			if rsp != nil {
 				msgRsp := rmgr.MessageEncode(rsp)
 				msgsRsp = append(msgsRsp, msgRsp...)
@@ -95,7 +101,7 @@ func (rmgr *SimpleRpcMgr) MessageDecode(buf []byte) (uint32, []byte) {
 	return offset, msgsRsp
 }
 
-func (rmgr *SimpleRpcMgr) RpcDecode(b []byte) []byte {
+func (rmgr *SimpleRpcMgr) RpcDecode(c *TcpClient, b []byte) []byte {
 
 	decoder := msgpack.NewDecoder(bytes.NewBuffer(b))
 
@@ -121,18 +127,17 @@ func (rmgr *SimpleRpcMgr) RpcDecode(b []byte) []byte {
 		stValue.Field(i).Set(nv.Elem())
 	}
 
-	rpc.Process()
+	rpc.Process(c)
 
-	if rpc.GetRspPtr() == nil {
+	rspPtr := reflect.ValueOf(rpc.GetRspPtr())
+	if rpc.GetRspPtr() == nil || rspPtr.IsNil() {
 		return nil
 	}
 
 	// for response
 	args := []interface{}{}
-	rspPtr := reflect.ValueOf(rpc.GetRspPtr())
 	switch rpc.GetRspPtr().(type) {
-
-	case decodeWithoutFieldName:
+	case encodeWithoutFieldName:
 		stValue = rspPtr.Elem()
 		for i := 0; i < stValue.NumField(); i++ {
 			args = append(args, stValue.Field(i).Interface())
@@ -181,26 +186,32 @@ func (rmgr *SimpleRpcMgr) RpcEncode(name string, args ...interface{}) []byte {
 	return writer.Bytes()
 }
 
-// func (rmgr *SimpleRpcMgr) RpcEncode(name string, req interface{}) []byte {
+func (rmgr *SimpleRpcMgr) GetRpcHanderGenerator(rpcName string) (RpcHanderGenerator, bool) {
+	f, ok := rmgr.rpcs[rpcName]
+	return f, ok
+}
 
-// 	writer := &bytes.Buffer{}
-// 	encoder := msgpack.NewEncoder(writer)
-// 	if err := encoder.Encode(name); err != nil {
-// 		ERROR_LOG("encode rpc name error %v", err)
-// 	}
+var rpcMgr *SimpleRpcMgr = nil
 
-// 	ptrValue := reflect.ValueOf(req)
-// 	stValue := ptrValue.Elem()
-// 	for i := 0; i < stValue.NumField(); i++ {
-// 		if err := encoder.Encode(stValue.Field(i).Interface()); err != nil {
-// 			ERROR_LOG("args encode error %s - %s: %v", name, stValue.Field(i).Type().Name(), err)
-// 			continue
-// 		}
-// 	}
+func GetRpcMgr() *SimpleRpcMgr {
+	return rpcMgr
+}
 
-// 	return writer.Bytes()
-// }
+func CreateSimpleRpcMgr() {
+	rpcMgr = &SimpleRpcMgr{rpcs: make(map[string]RpcHanderGenerator)}
 
-func CreateSimpleRpcMgr() RpcMgr {
-	return &SimpleRpcMgr{rpcs: make(map[string]RpcHanderGenerator)}
+	// default handler
+	rpcMgr.RegistRpcHandler(MSG_G2S_RPC_CALL, func() RpcHandler {return new(RpcG2SRpcCallHandler)})
+}
+
+func RegistRpcHandler(name string, gen RpcHanderGenerator) {
+	rpcMgr.RegistRpcHandler(name, gen)
+}
+
+func MessageEncode(b []byte) []byte {
+	return rpcMgr.MessageEncode(b)
+}
+
+func RpcEncode(name string, args ...interface{}) []byte {
+	return rpcMgr.RpcEncode(name, args...)
 }

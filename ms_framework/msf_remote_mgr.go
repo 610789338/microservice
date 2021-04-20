@@ -11,6 +11,11 @@ import (
 
 type REMOTE_ID string  // namespace:service
 
+/*
+ * 建立本地路由缓存
+ * 本地路由缓存更新：被动更新（依赖etcd）
+ * 负载均衡
+ */
 type RemoteMgr struct {
 	remotes  	map[REMOTE_ID]map[CONN_ID]*Remote
 	addChan		chan []string
@@ -58,6 +63,7 @@ func (rmgr *RemoteMgr) OnRemoteDiscover(namespace string, svrName string, ip str
 }
 
 func (rmgr *RemoteMgr) OnRemoteDisappear(remoteID REMOTE_ID, connID CONN_ID) {
+	// INFO_LOG("OnRemoteDisappear %v %v %+v", remoteID, connID, rmgr)
 	rmgr.delChan <- []string{string(remoteID), string(connID)}
 }
 
@@ -86,6 +92,7 @@ func (rmgr *RemoteMgr) ConnectRemote(namespace string, svrName string, ip string
 		rmgr.remotes[remoteID][GetConnID(c)] = &Remote{
 			id: remoteID,
 			conn: c,
+			rmgr: rmgr,
 			recvBuf: make([]byte, RECV_BUF_MAX_LEN),
 			remainLen: 0,
 		}
@@ -98,12 +105,13 @@ func (rmgr *RemoteMgr) ConnectRemote(namespace string, svrName string, ip string
 func (r *Remote) HandleRead() {
 	defer func() {
 		INFO_LOG("remote close %v", r.conn.RemoteAddr())
-		r.conn.Close()
 		r.rmgr.OnRemoteDisappear(r.id, GetConnID(r.conn))
+		r.conn.Close()
 	} ()
 
 	for true {
 		len, err := r.conn.Read(r.recvBuf[r.remainLen:])
+		// INFO_LOG("remote read %v %v", len, err)
 		if err != nil {
 			if err != io.EOF {
 				ERROR_LOG("read error %v", err)
@@ -126,7 +134,7 @@ func (r *Remote) HandleRead() {
 			break
 		}
 
-		procLen, _ := rpcMgr.MessageDecode(r.recvBuf[:r.remainLen])
+		procLen, _ := rpcMgr.MessageDecode(nil, r.recvBuf[:r.remainLen])
 		r.remainLen -= procLen
 		if r.remainLen < 0 {
 			ERROR_LOG("r.remainLen(%d) < 0 procLen(%d) @%s", r.remainLen, procLen, r.conn.RemoteAddr())
@@ -138,12 +146,25 @@ func (r *Remote) HandleRead() {
 	}
 }
 
-func CreateRemoteMgr() *RemoteMgr {
-	return &RemoteMgr{
+func (r *Remote) Write(b []byte) (n int, err error){
+	n, err = r.conn.Write(b)
+	return
+}
+
+func (r *Remote) RemoteAddr() net.Addr {
+	return r.conn.RemoteAddr()
+}
+
+var remoteMgr *RemoteMgr = nil
+
+func CreateRemoteMgr() {
+	remoteMgr = &RemoteMgr{
 		remotes: make(map[REMOTE_ID]map[CONN_ID]*Remote),
 		addChan: make(chan []string),
 		delChan: make(chan []string),
 	}
+
+	go remoteMgr.Start()
 }
 
 func GetRemoteID(namespace string, svrName string) REMOTE_ID {

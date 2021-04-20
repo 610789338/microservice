@@ -18,27 +18,15 @@ type NetServer interface {
 	Close()
 }
 
-type RpcHandler interface {
-	GetReqPtr() interface{}
-	GetRspPtr() interface{}
-	Process()
-}
+// type RpcMgr interface {
+// 	RegistRpcHandler		(name string, gen RpcHanderGenerator)
+// 	MessageDecode			(buf []byte) (uint32, []byte)
+// 	MessageEncode			(b []byte) []byte
+// 	RpcDecode				(buf []byte) []byte
+// 	RpcEncode				(name string, args ...interface{}) []byte
+// 	GetRpcHanderGenerator	(rpcName string) (RpcHanderGenerator, bool)
+// }
 
-type RpcMgr interface {
-	RegistRpcHandler	(name string, gen RpcHanderGenerator)
-	MessageDecode		(buf []byte) (uint32, []byte)
-	MessageEncode		(b []byte) []byte
-	RpcDecode			(buf []byte) []byte
-	RpcEncode			(name string, args ...interface{}) []byte
-}
-
-var rpcMgr RpcMgr = nil
-var netServer *TcpServer = nil
-var remoteMgr *RemoteMgr = nil
-
-func RegistRpcHandler(name string, gen RpcHanderGenerator) {
-	rpcMgr.RegistRpcHandler(name, gen)
-}
 
 func OnRemoteDiscover(namespace string, svrName string, ip string, port uint32) {
 	remoteMgr.OnRemoteDiscover(namespace, svrName, ip, port)
@@ -47,13 +35,9 @@ func OnRemoteDiscover(namespace string, svrName string, ip string, port uint32) 
 func Init(ip string, port int) {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	rpcMgr = CreateSimpleRpcMgr()
-	rpcMgr.RegistRpcHandler(MSG_G2S_RPC_CALL, func() RpcHandler {return new(RpcG2SRpcCallHandler)})
-
-	netServer = CreateTcpServer(ip, port)
-
-	remoteMgr = CreateRemoteMgr()
-	go remoteMgr.Start()
+	CreateSimpleRpcMgr()
+	CreateTcpServer(ip, port)
+	CreateRemoteMgr()
 
 	INFO_LOG("ms init ok ...")
 }

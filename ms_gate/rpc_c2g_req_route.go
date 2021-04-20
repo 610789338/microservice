@@ -5,7 +5,6 @@ import (
 	"fmt"
 )
 
-
 type RpcC2GRpcRouteReq struct {
 	NameSpace	 	string
 	Service 		string
@@ -18,7 +17,7 @@ type RpcC2GRpcRouteRsp struct {
 	Error 			string
 	Reply   		map[string]interface{}
 }
-func (*RpcC2GRpcRouteRsp) DecodeWithoutFieldName(){}
+func (*RpcC2GRpcRouteRsp) EncodeWithoutFieldName(){}
 
 type RpcC2GRpcRouteHandler struct {
 	req 	RpcC2GRpcRouteReq
@@ -28,12 +27,8 @@ type RpcC2GRpcRouteHandler struct {
 func (r *RpcC2GRpcRouteHandler) GetReqPtr() interface{} {return &(r.req)}
 func (r *RpcC2GRpcRouteHandler) GetRspPtr() interface{} {return r.rsp}
 
-func (r *RpcC2GRpcRouteHandler) Process() {
+func (r *RpcC2GRpcRouteHandler) Process(c *msf.TcpClient) {
 	// 消息路由，根据namespace:service:method从本地ip缓存中找到tcp连接，然后将消息路由过去
-	// TODO LIST
-	// * 建立本地路由缓存
-	// * 本地路由缓存更新：主动更新 and 被动更新（依赖etcd）
-	// * 负载均衡
 
 	// * 从B里面解析出Rid, if Rid != 0
 	// * 生成GRid，并建立GRid <-> clientID:Rid的对应关系
@@ -42,8 +37,29 @@ func (r *RpcC2GRpcRouteHandler) Process() {
 	remoteID := msf.GetRemoteID(r.req.NameSpace, r.req.Service)
 	remote := msf.ChoiceRemote(remoteID)
 
-	// error response
-	if nil == remote {
+	if remote != nil {
+		grid := uint32(0)
+		if r.req.Rid != 0 {
+			grid = msf.GenGid()
+		}
+
+		rpc := msf.RpcEncode(msf.MSG_G2S_RPC_CALL, grid, r.req.InnerRpc)
+		msg := msf.MessageEncode(rpc)
+
+		wLen, err := remote.Write(msg)
+		if err != nil {
+			msf.ERROR_LOG("write %v error %v", remote.RemoteAddr(), err)
+			return
+		}
+
+		if wLen != len(msg) {
+			msf.WARN_LOG("write len(%v) != msg len(%v) @%v", wLen, len(msg), remote.RemoteAddr())
+		}
+
+		gCbChan <- []interface{}{"add", grid, r.req.Rid, c.GetClientID()}
+
+	} else {
+		// error response
 		r.rsp = &RpcC2GRpcRouteRsp{Rid: r.req.Rid, Error: fmt.Sprintf("service[%s:%s] not exist", r.req.NameSpace, r.req.Service), Reply: nil}
 	}
 

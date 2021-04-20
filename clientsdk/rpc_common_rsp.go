@@ -19,15 +19,14 @@ type RpcCommonRspHandler struct {
 func (r *RpcCommonRspHandler) GetReqPtr() interface{} {return &(r.req)}
 func (r *RpcCommonRspHandler) GetRspPtr() interface{} {return nil}
 
-func (r *RpcCommonRspHandler) Process() {
+func (r *RpcCommonRspHandler) Process(c *msf.TcpClient) {
 	// msf.DEBUG_LOG("[RpcCommonRspHandler] rid(%v) error(%v) reply(%v)", r.req.Rid, r.req.Error, r.req.Reply)
 
-	cb, ok := gCbMap[r.req.Rid]
-	if !ok {
-		msf.ERROR_LOG("rid %v not exsit", r.req.Rid)
-		return
+	cbChan := make(chan interface{})
+	gCbChan <- []interface{}{"get&del", r.req.Rid, cbChan}
+	
+	cb := <- cbChan
+	if cb != nil {
+		cb.(CallBack)(r.req.Error, r.req.Reply)
 	}
-
-	cb(r.req.Error, r.req.Reply)
-	gCbChan <- []interface{}{"del", r.req.Rid}
 }

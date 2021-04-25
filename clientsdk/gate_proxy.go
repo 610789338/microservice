@@ -37,8 +37,8 @@ func CallBackMgr() {
 			cb := CallBack(elem[2].(func(err string, result map[string]interface{})))
 
 			if len(gCbMap) >= gCbMapMaxSize {
-				msf.ERROR_LOG("call back cache size %v > %v", len(gCbMap), gCbMapMaxSize)
-				return
+				msf.WARN_LOG("========================= call back cache size %v > %v", len(gCbMap), gCbMapMaxSize)
+				// return
 			}
 
 			gCbMap[rid] = cb
@@ -89,18 +89,18 @@ type GateProxy struct {
 	remainLen 		uint32
 }
 
-func (c *GateProxy) Start() {
-	go c.HandleRead()
+func (g *GateProxy) Start() {
+	go g.HandleRead()
 }
 
-func (c *GateProxy) HandleRead() {
+func (g *GateProxy) HandleRead() {
 	defer func() {
-		msf.INFO_LOG("tcp client close %v", c.conn.RemoteAddr())
-		c.conn.Close()
+		msf.INFO_LOG("tcp client close %v", g.conn.RemoteAddr())
+		g.conn.Close()
 	} ()
 
 	for true {
-		len, err := c.conn.Read(c.recvBuf[c.remainLen:])
+		len, err := g.conn.Read(g.recvBuf[g.remainLen:])
 		if err != nil {
 			if err != io.EOF {
 				msf.ERROR_LOG("read error %v", err)
@@ -110,58 +110,62 @@ func (c *GateProxy) HandleRead() {
 
 		if 0 == len {
 			// remote close
-			msf.INFO_LOG("tcp connection close by remote %v %v", c.conn.RemoteAddr(), err)
+			msf.INFO_LOG("tcp connection close by remote %v %v", g.conn.RemoteAddr(), err)
 			break
 		}
 
-		c.remainLen += uint32(len)
-		if c.remainLen > msf.RECV_BUF_MAX_LEN/2 {
-			msf.WARN_LOG("tcp connection buff cache too long!!! %dk > %dk", c.remainLen/1024, msf.RECV_BUF_MAX_LEN/1024)
+		g.remainLen += uint32(len)
+		if g.remainLen > msf.RECV_BUF_MAX_LEN/2 {
+			msf.WARN_LOG("tcp connection buff cache too long!!! %dk > %dk", g.remainLen/1024, msf.RECV_BUF_MAX_LEN/1024)
 			
-		} else if c.remainLen > msf.RECV_BUF_MAX_LEN {
-			msf.ERROR_LOG("tcp connection buff cache overflow!!! %dk > %dk", c.remainLen/1024, msf.RECV_BUF_MAX_LEN/1024)
+		} else if g.remainLen > msf.RECV_BUF_MAX_LEN {
+			msf.ERROR_LOG("tcp connection buff cache overflow!!! %dk > %dk", g.remainLen/1024, msf.RECV_BUF_MAX_LEN/1024)
 			break
 		}
 
-		procLen, _ := rpcMgr.MessageDecode(nil, c.recvBuf[:c.remainLen])
-		c.remainLen -= procLen
-		if c.remainLen < 0 {
-			msf.ERROR_LOG("c.remainLen(%d) < 0 procLen(%d) @%s", c.remainLen, procLen, c.conn.RemoteAddr())
-			c.remainLen = 0
+		procLen := rpcMgr.MessageDecode(g.Turn2Session(), g.recvBuf[:g.remainLen])
+		g.remainLen -= procLen
+		if g.remainLen < 0 {
+			msf.ERROR_LOG("g.remainLen(%d) < 0 procLen(%d) @%s", g.remainLen, procLen, g.conn.RemoteAddr())
+			g.remainLen = 0
 			continue
 		}
 
-		copy(c.recvBuf, c.recvBuf[procLen: procLen + c.remainLen])
+		copy(g.recvBuf, g.recvBuf[procLen: procLen + g.remainLen])
 	}
 }
 
-func (c *GateProxy) RpcCall(rpcName string, args ...interface{}) {
+func (g *GateProxy) RpcCall(rpcName string, args ...interface{}) {
 	rpc := rpcMgr.RpcEncode(rpcName, args...)
 	msg := rpcMgr.MessageEncode(rpc)
 
-	wLen, err := c.conn.Write(msg)
+	wLen, err := g.conn.Write(msg)
 	if err != nil {
-		msf.ERROR_LOG("write %v error %v", c.conn.RemoteAddr(), err)
+		msf.ERROR_LOG("write %v error %v", g.conn.RemoteAddr(), err)
 	}
 
 	if wLen != len(msg) {
-		msf.WARN_LOG("write len(%v) != msg len(%v) @%v", wLen, len(msg), c.conn.RemoteAddr())
+		msf.WARN_LOG("write len(%v) != msg len(%v) @%v", wLen, len(msg), g.conn.RemoteAddr())
 	}
 }
 
+func (g *GateProxy) Turn2Session() *msf.Session {
+	return msf.CreateSession(msf.SessionTcpClient, fmt.Sprintf("%s:%d", g.ip, g.port), g.conn)
+}
+
 func CreateGateProxy(_ip string, _port int) *GateProxy {
-	c, err := net.Dial("tcp", fmt.Sprintf("%s:%d", _ip, _port))
+	g, err := net.Dial("tcp", fmt.Sprintf("%s:%d", _ip, _port))
 	if err != nil {
 		msf.ERROR_LOG("connect %s:%d error %v", _ip, _port, err)
 		return nil
 	}
 
-	msf.INFO_LOG("connect %s:%d success %v", _ip, _port, c)
+	msf.INFO_LOG("connect %s:%d success %v", _ip, _port, g)
 
 	gp := &GateProxy {
 		ip:	_ip,
 		port: _port,
-		conn: c, 
+		conn: g, 
 		recvBuf: make([]byte, msf.RECV_BUF_MAX_LEN), 
 		remainLen: 0,
 	}
@@ -171,8 +175,8 @@ func CreateGateProxy(_ip string, _port int) *GateProxy {
 	return gp
 }
 
-func (c *GateProxy) CreateServiceProxy(namespace string, serviceName string) *ServiceProxy {
-	return &ServiceProxy{Gp: c, Namespace: namespace, ServiceName: serviceName}
+func (g *GateProxy) CreateServiceProxy(namespace string, serviceName string) *ServiceProxy {
+	return &ServiceProxy{Gp: g, Namespace: namespace, ServiceName: serviceName}
 }
 
 
@@ -183,9 +187,7 @@ type ServiceProxy struct {
 }
 
 // c2s的rpc调用，最后一个参数若是Func，则建立rid<->callback的缓存
-func (c *ServiceProxy) RpcCall(rpcName string, args ...interface{}) {
-
-	msf.DEBUG_LOG("rpc call %s args %v", rpcName, args)
+func (g *ServiceProxy) RpcCall(rpcName string, args ...interface{}) {
 
 	var rid uint32 = 0
 	if len(args) > 0 {
@@ -198,8 +200,10 @@ func (c *ServiceProxy) RpcCall(rpcName string, args ...interface{}) {
 		}
 	}
 
+	// msf.DEBUG_LOG("rpc call %s args %v", rpcName, args)
+
 	innerRpc := rpcMgr.RpcEncode(rpcName, args...)
-	c.Gp.RpcCall(msf.MSG_C2G_RPC_ROUTE, c.Namespace, c.ServiceName, rid, innerRpc)
+	g.Gp.RpcCall(msf.MSG_C2G_RPC_ROUTE, g.Namespace, g.ServiceName, rid, innerRpc)
 }
 
 func GenGid() uint32 {

@@ -5,8 +5,42 @@ import (
 	"reflect"
 	"github.com/vmihailenco/msgpack"
 	"bytes"
-	// "fmt"
+	"fmt"
+	"net"
 )
+
+const (
+	SessionTcpClient int8 = iota
+	SessionRemote
+	SessionGateProxy
+)
+
+type Session struct {
+	typ    		int8
+	id     		string
+	conn		net.Conn
+}
+
+func (session *Session) SendResponse(msg []byte) {
+	if len(msg) != 0 {
+		wLen, err := session.conn.Write(msg)
+		if err != nil {
+			ERROR_LOG("write %v error %v", session.conn.RemoteAddr(), err)
+		}
+
+		if wLen != len(msg) {
+			WARN_LOG("write len(%v) != rsp msg len(%v) @%v", wLen, len(msg), session.conn.RemoteAddr())
+		}
+	}
+}
+
+func (session *Session) GetID() string {
+	return session.id
+}
+
+func CreateSession(typ int8, id string, conn net.Conn) *Session {
+	return &Session{typ: typ, id: id, conn: conn}
+}
 
 
 var MAX_PACKET_SIZE uint32 = 16*1024  // 16K
@@ -17,7 +51,7 @@ var MSG_C2G_RPC_ROUTE 	= "a"  // client to gate rpc route
 var MSG_G2S_RPC_CALL 	= "b"  // gate to service rpc call
 var MSG_COMMON_RSP 		= "c"  // common response include s2g && g2c
 
-type encodeWithoutFieldName interface{
+type encodeWithoutFieldName interface {
 	EncodeWithoutFieldName ()
 }
 
@@ -40,7 +74,7 @@ func WriteRid(buf []byte, v uint32) {
 type RpcHandler interface {
 	GetReqPtr() interface{}
 	GetRspPtr() interface{}
-	Process(c *TcpClient)
+	Process(session *Session)
 }
 
 type RpcHanderGenerator func() RpcHandler
@@ -61,14 +95,18 @@ func (rmgr *SimpleRpcMgr) RegistRpcHandler(name string, gen RpcHanderGenerator) 
 		panic("rpc.GetReqPtr() must be struct")
 	}
 
+	_, ok := rmgr.rpcs[name]
+	if ok {
+		panic(fmt.Sprintf("RegistRpcHandler %s repeat !!!", name))
+	}
+
 	rmgr.rpcs[name] = gen
 }
 
-func (rmgr *SimpleRpcMgr) MessageDecode(c *TcpClient, buf []byte) (uint32, []byte) {
+func (rmgr *SimpleRpcMgr) MessageDecode(session *Session, msg []byte) uint32 {
 	var offset uint32 = 0
-	var msgsRsp []byte = []byte{}
 
-	var bufLen uint32 = uint32(len(buf))
+	var bufLen uint32 = uint32(len(msg))
 
 	for offset < bufLen {
 		if bufLen - offset < MESSAGE_SIZE_LEN {
@@ -76,7 +114,7 @@ func (rmgr *SimpleRpcMgr) MessageDecode(c *TcpClient, buf []byte) (uint32, []byt
 			break
 		}
 
-		pkgLen := ReadPacketLen(buf[offset:])
+		pkgLen := ReadPacketLen(msg[offset:])
 		if bufLen - offset < MESSAGE_SIZE_LEN + pkgLen {
 			DEBUG_LOG("remain len(%d) < MESSAGE_SIZE_LEN(%d) + pkgLen(%d)", bufLen - offset, MESSAGE_SIZE_LEN, pkgLen)
 			break
@@ -87,56 +125,52 @@ func (rmgr *SimpleRpcMgr) MessageDecode(c *TcpClient, buf []byte) (uint32, []byt
 		if pkgLen > MAX_PACKET_SIZE {
 			ERROR_LOG("packet size too long %d > %d", pkgLen, MAX_PACKET_SIZE)
 		} else {
-
-			rsp := rmgr.RpcDecode(c, buf[offset: offset + pkgLen])
-			if rsp != nil {
-				msgRsp := rmgr.MessageEncode(rsp)
-				msgsRsp = append(msgsRsp, msgRsp...)
-			}
+			// go rmgr.RpcDecode(session, msg[offset: offset + pkgLen])
+			rmgr.RpcDecode(session, msg[offset: offset + pkgLen])
 		}
 
 		offset += pkgLen
 	}
 
-	return offset, msgsRsp
+	return offset
 }
 
-func (rmgr *SimpleRpcMgr) RpcDecode(c *TcpClient, b []byte) []byte {
+func (rmgr *SimpleRpcMgr) RpcDecode(session *Session, buf []byte) {
 
-	decoder := msgpack.NewDecoder(bytes.NewBuffer(b))
+	decoder := msgpack.NewDecoder(bytes.NewBuffer(buf))
 
 	var rpcName string
 	decoder.Decode(&rpcName)
 
-	f, ok := rmgr.rpcs[rpcName]
+	handerGen, ok := rmgr.rpcs[rpcName]
 	if !ok {
 		ERROR_LOG("rpc %s not exist", rpcName)
-		return nil
+		return
 	}
 
-	rpc := f()
-	reqPtr := reflect.ValueOf(rpc.GetReqPtr())
+	rpcHandler := handerGen()
+	reqPtr := reflect.ValueOf(rpcHandler.GetReqPtr())
 	stValue := reqPtr.Elem()
 	for i := 0; i < stValue.NumField(); i++ {
 		nv := reflect.New(stValue.Field(i).Type())
 		if err := decoder.Decode(nv.Interface()); err != nil {
 			ERROR_LOG("rpc(%s) arg(%s-%v) decode error: %v", rpcName, stValue.Type().Field(i).Name, nv.Type(), err)
-			return nil
+			return
 		}
 
 		stValue.Field(i).Set(nv.Elem())
 	}
 
-	rpc.Process(c)
+	rpcHandler.Process(session)
 
-	rspPtr := reflect.ValueOf(rpc.GetRspPtr())
-	if rpc.GetRspPtr() == nil || rspPtr.IsNil() {
-		return nil
+	rspPtr := reflect.ValueOf(rpcHandler.GetRspPtr())
+	if rpcHandler.GetRspPtr() == nil || rspPtr.IsNil() {
+		return
 	}
 
 	// for response
 	args := []interface{}{}
-	switch rpc.GetRspPtr().(type) {
+	switch rpcHandler.GetRspPtr().(type) {
 	case encodeWithoutFieldName:
 		stValue = rspPtr.Elem()
 		for i := 0; i < stValue.NumField(); i++ {
@@ -153,7 +187,9 @@ func (rmgr *SimpleRpcMgr) RpcDecode(c *TcpClient, b []byte) []byte {
 		args = append(args, stMap)
 	}
 
-	return rmgr.RpcEncode(MSG_COMMON_RSP, args...)
+	rpc := rmgr.RpcEncode(MSG_COMMON_RSP, args...)
+	msg := rmgr.MessageEncode(rpc)
+	session.SendResponse(msg)
 }
 
 func (rmgr *SimpleRpcMgr) MessageEncode(buf []byte) []byte {

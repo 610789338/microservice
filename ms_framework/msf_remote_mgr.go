@@ -12,9 +12,9 @@ import (
 type REMOTE_ID string  // namespace:service
 
 /*
- * 建立本地路由缓存
- * 本地路由缓存更新：被动更新（依赖etcd）
- * 负载均衡
+ * 用于gate服务发现
+ * 依赖etcd建立本地路由缓存
+ * 根据换成做路由负载均衡
  */
 type RemoteMgr struct {
 	remotes  	map[REMOTE_ID]map[CONN_ID]*Remote
@@ -25,7 +25,6 @@ type RemoteMgr struct {
 type Remote struct {
 	id 				REMOTE_ID
 	conn			net.Conn
-	rmgr 			*RemoteMgr
 	recvBuf 		[]byte
 	remainLen 		uint32
 }
@@ -50,7 +49,7 @@ func (rmgr *RemoteMgr) Start() {
 					ERROR_LOG("remote conn not exist %s @%s", remoteID, connID)
 				}
 
-				INFO_LOG("OnRemoteDisappear %s:%s @%v", remoteID, connID)
+				INFO_LOG("OnRemoteDisappear %s@%v", remoteID, connID)
 				delete(conns, connID)
 			}
 		}
@@ -92,7 +91,6 @@ func (rmgr *RemoteMgr) ConnectRemote(namespace string, svrName string, ip string
 		rmgr.remotes[remoteID][GetConnID(c)] = &Remote{
 			id: remoteID,
 			conn: c,
-			rmgr: rmgr,
 			recvBuf: make([]byte, RECV_BUF_MAX_LEN),
 			remainLen: 0,
 		}
@@ -105,7 +103,7 @@ func (rmgr *RemoteMgr) ConnectRemote(namespace string, svrName string, ip string
 func (r *Remote) HandleRead() {
 	defer func() {
 		INFO_LOG("remote close %v", r.conn.RemoteAddr())
-		r.rmgr.OnRemoteDisappear(r.id, GetConnID(r.conn))
+		remoteMgr.OnRemoteDisappear(r.id, GetConnID(r.conn))
 		r.conn.Close()
 	} ()
 
@@ -134,7 +132,7 @@ func (r *Remote) HandleRead() {
 			break
 		}
 
-		procLen, _ := rpcMgr.MessageDecode(nil, r.recvBuf[:r.remainLen])
+		procLen := rpcMgr.MessageDecode(r.Turn2Session(), r.recvBuf[:r.remainLen])
 		r.remainLen -= procLen
 		if r.remainLen < 0 {
 			ERROR_LOG("r.remainLen(%d) < 0 procLen(%d) @%s", r.remainLen, procLen, r.conn.RemoteAddr())
@@ -153,6 +151,10 @@ func (r *Remote) Write(b []byte) (n int, err error){
 
 func (r *Remote) RemoteAddr() net.Addr {
 	return r.conn.RemoteAddr()
+}
+
+func (r *Remote) Turn2Session() *Session {
+	return &Session{typ: SessionRemote, id: string(r.id), conn: r.conn}
 }
 
 var remoteMgr *RemoteMgr = nil

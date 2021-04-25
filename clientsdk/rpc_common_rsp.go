@@ -19,7 +19,7 @@ type RpcCommonRspHandler struct {
 func (r *RpcCommonRspHandler) GetReqPtr() interface{} {return &(r.req)}
 func (r *RpcCommonRspHandler) GetRspPtr() interface{} {return nil}
 
-func (r *RpcCommonRspHandler) Process(c *msf.TcpClient) {
+func (r *RpcCommonRspHandler) Process(session *msf.Session) {
 	// msf.DEBUG_LOG("[RpcCommonRspHandler] rid(%v) error(%v) reply(%v)", r.req.Rid, r.req.Error, r.req.Reply)
 
 	cbChan := make(chan interface{})

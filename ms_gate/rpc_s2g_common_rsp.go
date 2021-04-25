@@ -18,9 +18,9 @@ type RpcS2GCommonRspHandler struct {
 func (r *RpcS2GCommonRspHandler) GetReqPtr() interface{} {return &(r.req)}
 func (r *RpcS2GCommonRspHandler) GetRspPtr() interface{} {return nil}
 
-func (r *RpcS2GCommonRspHandler) Process(c *msf.TcpClient) {
+func (r *RpcS2GCommonRspHandler) Process(session *msf.Session) {
 	// 根据GRid找到clientID:Rid，将GRid替换成Rid，然后把Error和Reply透传给client
-	msf.INFO_LOG("RpcS2GCommonRspHandler: %+v", r.req)
+	msf.DEBUG_LOG("RpcS2GCommonRspHandler: %+v", r.req)
 
 	rcIDChan := make(chan []interface{})
 	gCbChan <- []interface{}{"get&del", r.req.GRid, rcIDChan}

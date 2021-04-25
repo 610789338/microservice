@@ -28,17 +28,20 @@ type RpcG2SRpcCallHandler struct {
 func (r *RpcG2SRpcCallHandler) GetReqPtr() interface{} {return &(r.req)}
 func (r *RpcG2SRpcCallHandler) GetRspPtr() interface{} {return r.rsp}
 
-func (r *RpcG2SRpcCallHandler) Process(c *TcpClient) {
-	// TODO
-	INFO_LOG("RpcG2SRpcCallHandler: %v", r.req)
+func (r *RpcG2SRpcCallHandler) Process(session *Session) {
 
-	error, reply := r.g2srpc_handler(c)
+	error, reply := r.g2srpc_handler(session)
+
 	if r.req.GRid != 0 {
 		r.rsp = &RpcG2SRpcCallRsp{GRid: r.req.GRid, Error: error, Reply: reply}
 	}
+
+	if error != "" {
+		ERROR_LOG("[RpcG2SRpcCallHandler] %v", error)
+	}
 }
 
-func (r *RpcG2SRpcCallHandler) g2srpc_handler(c *TcpClient) (string, map[string]interface{}){
+func (r *RpcG2SRpcCallHandler) g2srpc_handler(session *Session) (string, map[string]interface{}){
 
 	decoder := msgpack.NewDecoder(bytes.NewBuffer(r.req.InnerRpc))
 
@@ -47,7 +50,6 @@ func (r *RpcG2SRpcCallHandler) g2srpc_handler(c *TcpClient) (string, map[string]
 
 	f, ok := rpcMgr.GetRpcHanderGenerator(rpcName)
 	if !ok {
-		ERROR_LOG("rpc %s not exist", rpcName)
 		return fmt.Sprintf("rpc %s not exist", rpcName), nil
 	}
 
@@ -57,31 +59,34 @@ func (r *RpcG2SRpcCallHandler) g2srpc_handler(c *TcpClient) (string, map[string]
 	for i := 0; i < stValue.NumField(); i++ {
 		nv := reflect.New(stValue.Field(i).Type())
 		if err := decoder.Decode(nv.Interface()); err != nil {
-			ERROR_LOG("rpc(%s) arg(%s-%v) decode error: %v", rpcName, stValue.Type().Field(i).Name, nv.Type(), err)
-			return fmt.Sprint("rpc(%s) arg(%s-%v) decode error: %v", rpcName, stValue.Type().Field(i).Name, nv.Type(), err), nil
+			return fmt.Sprint("rpc %s arg %s(%v) decode error: %v", rpcName, stValue.Type().Field(i).Name, nv.Type(), err), nil
 		}
 
 		stValue.Field(i).Set(nv.Elem())
 	}
 
-	rpc.Process(c)
+	rpc.Process(session)
 
-	rspPtr := reflect.ValueOf(rpc.GetRspPtr())
-	if rspPtr.IsNil() {
-		if r.req.GRid != 0 {
-			ERROR_LOG("rpc(%s) need response but get nil", rpcName)
-			return fmt.Sprint("rpc(%s) need response but get nil", rpcName), nil
+	if r.req.GRid != 0 {
+		rspPtr := reflect.ValueOf(rpc.GetRspPtr())
+		if rspPtr.IsNil() {
+			if r.req.GRid != 0 {
+				return fmt.Sprint("rpc %s need response but get nil", rpcName), nil
+			}
+			return "", nil
 		}
 
-		return "", nil
+		// for response
+		stMap := make(map[string]interface{})
+		stValue = rspPtr.Elem()
+		for i := 0; i < stValue.NumField(); i++ {
+			stMap[stValue.Type().Field(i).Name] = stValue.Field(i).Interface()
+		}
+
+		DEBUG_LOG("[RpcG2SRpcCallHandler] - METHOD[%s] args[%v] response[%v]", rpcName, rpc.GetReqPtr(), stMap)
+		return "", stMap
 	}
 
-	// for response
-	stMap := make(map[string]interface{})
-	stValue = rspPtr.Elem()
-	for i := 0; i < stValue.NumField(); i++ {
-		stMap[stValue.Type().Field(i).Name] = stValue.Field(i).Interface()
-	}
-
-	return "", stMap
+	DEBUG_LOG("[RpcG2SRpcCallHandler] - METHOD[%s] args[%v] response[nil]", rpcName, rpc.GetReqPtr())
+	return "", nil
 }

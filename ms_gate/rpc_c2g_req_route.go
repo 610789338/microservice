@@ -27,12 +27,14 @@ type RpcC2GRpcRouteHandler struct {
 func (r *RpcC2GRpcRouteHandler) GetReqPtr() interface{} {return &(r.req)}
 func (r *RpcC2GRpcRouteHandler) GetRspPtr() interface{} {return r.rsp}
 
-func (r *RpcC2GRpcRouteHandler) Process(c *msf.TcpClient) {
-	// 消息路由，根据namespace:service:method从本地ip缓存中找到tcp连接，然后将消息路由过去
-
-	// * 从B里面解析出Rid, if Rid != 0
-	// * 生成GRid，并建立GRid <-> clientID:Rid的对应关系
-	// * 用GRid替换掉rpc中的rid
+func (r *RpcC2GRpcRouteHandler) Process(session *msf.Session) {
+	/*
+	 * 消息路由，根据namespace:service:method从本地ip缓存中找到对应service的tcp连接，然后将消息路由过去
+	 * 从B里面解析出Rid
+	 * if Rid != 0
+	 *   生成GRid，并建立GRid <-> clientID:Rid的对应关系
+	 * 往service发送MSG_G2S_RPC_CALL请求
+	 */
 
 	remoteID := msf.GetRemoteID(r.req.NameSpace, r.req.Service)
 	remote := msf.ChoiceRemote(remoteID)
@@ -56,7 +58,9 @@ func (r *RpcC2GRpcRouteHandler) Process(c *msf.TcpClient) {
 			msf.WARN_LOG("write len(%v) != msg len(%v) @%v", wLen, len(msg), remote.RemoteAddr())
 		}
 
-		gCbChan <- []interface{}{"add", grid, r.req.Rid, c.GetClientID()}
+		if r.req.Rid != 0 {
+			gCbChan <- []interface{}{"add", grid, r.req.Rid, msf.CLIENT_ID(session.GetID())}
+		}
 
 	} else {
 		// error response
@@ -64,7 +68,7 @@ func (r *RpcC2GRpcRouteHandler) Process(c *msf.TcpClient) {
 	}
 
 	if r.rsp != nil {
-		msf.ERROR_LOG("[RpcC2GRpcRouteHandler] - SERVICE - [%s:%s] rid[%v] response[%v]", r.req.NameSpace, r.req.Service, r.req.Rid, r.rsp.Error)
+		msf.DEBUG_LOG("[RpcC2GRpcRouteHandler] - SERVICE - [%s:%s] rid[%v] response[%v]", r.req.NameSpace, r.req.Service, r.req.Rid, r.rsp.Error)
 	} else {
 		msf.DEBUG_LOG("[RpcC2GRpcRouteHandler] - SERVICE - [%s:%s] rid[%v] response[nil]", r.req.NameSpace, r.req.Service, r.req.Rid)
 	}

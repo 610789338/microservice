@@ -7,13 +7,8 @@ import (
 	"io"
 )
 
-type CLIENT_ID string
+type CLIENT_ID string  // RemoteAddr()
 type CONN_ID CLIENT_ID
-
-// type NetClient interface {
-// 	handleRead()
-// 	Close()
-// }
 
 var RECV_BUF_MAX_LEN uint32 = 1024*1024  // 1M
 
@@ -27,7 +22,6 @@ type TcpServer struct {
 type TcpClient struct {
 	id 				CLIENT_ID
 	conn			net.Conn
-	server 			*TcpServer
 	recvBuf 		[]byte
 	remainLen 		uint32
 	exit 			bool
@@ -68,7 +62,6 @@ func (s *TcpServer) Start() {
 		s.clients[cID] = &TcpClient{
 			id: cID, 
 			conn: conn, 
-			server: s,
 			recvBuf: make([]byte, RECV_BUF_MAX_LEN),
 			remainLen: 0,
 			exit: false,
@@ -90,10 +83,6 @@ func (s *TcpServer) Close(){
 
 func (s *TcpServer) onClientClose(c *TcpClient){
 	delete(s.clients, GetClientID(c.conn))
-}
-
-func (c *TcpClient) HeartBeat() {
-	
 }
 
 func (c *TcpClient) HandleRead() {
@@ -135,7 +124,7 @@ func (c *TcpClient) HandleRead() {
 			break
 		}
 
-		procLen, msgsRsp := rpcMgr.MessageDecode(c, c.recvBuf[:c.remainLen])
+		procLen := rpcMgr.MessageDecode(c.Turn2Session(), c.recvBuf[:c.remainLen])
 		c.remainLen -= procLen
 		if c.remainLen < 0 {
 			ERROR_LOG("c.remainLen(%d) < 0 procLen(%d) @%s", c.remainLen, procLen, c.conn.RemoteAddr())
@@ -144,22 +133,11 @@ func (c *TcpClient) HandleRead() {
 		}
 
 		copy(c.recvBuf, c.recvBuf[procLen: procLen + c.remainLen])
-
-		if len(msgsRsp) != 0 {
-			wLen, err := c.conn.Write(msgsRsp)
-			if err != nil {
-				ERROR_LOG("write %v error %v", c.conn.RemoteAddr(), err)
-			}
-
-			if wLen != len(msgsRsp) {
-				WARN_LOG("write len(%v) != msgsRsp len(%v) @%v", wLen, len(msgsRsp), c.conn.RemoteAddr())
-			}
-		}
 	}
 }
 
 func (c *TcpClient) Close() {
-	c.server.onClientClose(c)
+	tcpServer.onClientClose(c)
 }
 
 func (c *TcpClient) Write(b []byte) (n int, err error){
@@ -175,15 +153,27 @@ func (c *TcpClient) GetClientID() CLIENT_ID {
 	return GetClientID(c.conn)
 }
 
-var netServer *TcpServer = nil
+func (c *TcpClient) Turn2Session() *Session {
+	return &Session{typ: SessionTcpClient, id: string(c.id), conn: c.conn}
+}
+
+// func (c *TcpClient) HeartBeat() {
+	
+// }
+
+var tcpServer *TcpServer = nil
 
 func CreateTcpServer(_ip string, _port int) {
-	netServer = &TcpServer{ip: _ip, port: _port, clients: make(map[CLIENT_ID]*TcpClient)}
+	tcpServer = &TcpServer{ip: _ip, port: _port, clients: make(map[CLIENT_ID]*TcpClient)}
+}
+
+func TcpServerStart() {
+	tcpServer.Start()
 }
 
 func GetClient(clientID CLIENT_ID) *TcpClient {
 	// TODO: concurrent panic
-	client, ok := netServer.clients[clientID]
+	client, ok := tcpServer.clients[clientID]
 	if !ok {
 		ERROR_LOG("client %v not exist", clientID)
 		return nil

@@ -5,11 +5,6 @@ import (
 )
 
 
-// func DEBUG_LOG(format string, params ...interface{} ) {msf_log.DEBUG_LOG(format, params...)}
-// func INFO_LOG(format string, params ...interface{} ) {msf_log.INFO_LOG(format, params...)}
-// func WARN_LOG(format string, params ...interface{} ) {msf_log.WARN_LOG(format, params...)}
-// func ERROR_LOG(format string, params ...interface{} ) {msf_log.ERROR_LOG(format, params...)}
-
 var USE_SIMPLE_RPC bool = true
 var USE_TCP bool = true
 
@@ -32,11 +27,11 @@ func OnRemoteDiscover(namespace string, svrName string, ip string, port uint32) 
 	remoteMgr.OnRemoteDiscover(namespace, svrName, ip, port)
 }
 
-func Init(ip string, port int) {
+func Init() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	CreateSimpleRpcMgr()
-	CreateTcpServer(ip, port)
+	CreateTcpServer("", GlobalCfg.Port)
 	CreateRemoteMgr()
 
 	INFO_LOG("ms init ok ...")
@@ -44,7 +39,6 @@ func Init(ip string, port int) {
 
 func Start() {
 	INFO_LOG("ms start ...")
-	netServer.Start()
-
+	TcpServerStart()
 	INFO_LOG("ms stop ...")
 }

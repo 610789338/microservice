@@ -125,8 +125,10 @@ func (rmgr *SimpleRpcMgr) MessageDecode(session *Session, msg []byte) uint32 {
 		if pkgLen > MAX_PACKET_SIZE {
 			ERROR_LOG("packet size too long %d > %d", pkgLen, MAX_PACKET_SIZE)
 		} else {
-			// go rmgr.RpcDecode(session, msg[offset: offset + pkgLen])
-			rmgr.RpcDecode(session, msg[offset: offset + pkgLen])
+			buf := make([]byte, pkgLen)
+			copy(buf, msg[offset: offset + pkgLen])
+			go rmgr.RpcDecode(session, buf)
+			// rmgr.RpcDecode(session, msg[offset: offset + pkgLen])
 		}
 
 		offset += pkgLen

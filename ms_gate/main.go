@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	CallBackMgrStart()
+	// CallBackMgrStart()
 
 	msf.ParseArgs()
 	msf.Init()

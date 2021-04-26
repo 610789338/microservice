@@ -133,6 +133,7 @@ func (c *TcpClient) HandleRead() {
 		}
 
 		copy(c.recvBuf, c.recvBuf[procLen: procLen + c.remainLen])
+		// INFO_LOG("tcp recv buf %v", rLen)
 	}
 }
 

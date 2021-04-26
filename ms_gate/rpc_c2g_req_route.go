@@ -45,6 +45,11 @@ func (r *RpcC2GRpcRouteHandler) Process(session *msf.Session) {
 			grid = msf.GenGid()
 		}
 
+		if r.req.Rid != 0 {
+			// must before remote write
+			AddCallBack(grid, r.req.Rid, msf.CLIENT_ID(session.GetID()))
+		}
+
 		rpc := msf.RpcEncode(msf.MSG_G2S_RPC_CALL, grid, r.req.InnerRpc)
 		msg := msf.MessageEncode(rpc)
 
@@ -56,10 +61,6 @@ func (r *RpcC2GRpcRouteHandler) Process(session *msf.Session) {
 
 		if wLen != len(msg) {
 			msf.WARN_LOG("write len(%v) != msg len(%v) @%v", wLen, len(msg), remote.RemoteAddr())
-		}
-
-		if r.req.Rid != 0 {
-			gCbChan <- []interface{}{"add", grid, r.req.Rid, msf.CLIENT_ID(session.GetID())}
 		}
 
 	} else {

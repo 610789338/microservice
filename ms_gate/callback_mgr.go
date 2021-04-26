@@ -1,65 +1,55 @@
 package main
 
 import (
-	"time"
 	msf "ms_framework"
+	"time"
+	"sync"
 )
 
-var gCbMap map[uint32] []interface{}
-var gCbMapMaxSize = 100
-var gCbChan chan []interface{}
+var gCbMap = make(map[uint32] []interface{})
+var gCbMapMaxSize = 10000
+var cbMutex sync.Mutex
+
 
 // 利用time.After实现callback的超时控制，避免gCbMap被撑爆
 func CallBackTimeOut(grid uint32) {
 	select {
 	case <- time.After(time.Second * 20):
-		gCbChan <- []interface{}{"get&del", grid, nil}
-	}
-}
-
-func CallBackMgr() {
-
-	for true {
-		elem := <- gCbChan
-		oper := elem[0].(string)
-
-		if "add" == oper {
-			grid := elem[1].(uint32)
-			rid := elem[2].(uint32)
-			clientID := elem[3].(msf.CLIENT_ID)
-
-			if len(gCbMap) >= gCbMapMaxSize {
-				msf.WARN_LOG("========================= call back cache size %v > %v", len(gCbMap), gCbMapMaxSize)
-				// return
-			}
-
-			gCbMap[grid] = []interface{}{rid, clientID}
-
-			go CallBackTimeOut(grid)
-
-		} else if "get&del" == oper {
-			grid := elem[1].(uint32)
-			rcID, ok := gCbMap[grid]
-
-			rcIDChan := elem[2]
-			if ok {
-				if rcIDChan != nil {
-					rcIDChan.(chan []interface{}) <- rcID
-				}
-				delete(gCbMap, grid)
-
-			} else {
-				if rcIDChan != nil {
-					rcIDChan.(chan []interface{}) <- nil
-					msf.ERROR_LOG("call back get error %v", grid)
-				}
-			}
+		cbMutex.Lock()
+		_, ok := gCbMap[grid]
+		if ok {
+			msf.ERROR_LOG("call back timeout %v", grid)
 		}
+
+		delete(gCbMap, grid)
+		cbMutex.Unlock()
 	}
 }
 
-func CallBackMgrStart() {
-	gCbMap = make(map[uint32] []interface{})
-	gCbChan = make(chan []interface{})
-	go CallBackMgr()
+func AddCallBack(grid uint32, rid uint32, clientID msf.CLIENT_ID) {
+	cbMutex.Lock()
+	gCbMap[grid] = []interface{}{rid, clientID}
+
+	// _, ok := gCbMap[grid]
+	// msf.ERROR_LOG("add call back %v %v, %v", grid, rid, ok)
+
+	cbMutex.Unlock()
+
+	// 协程开多了会影响性能，可以考虑用排序链表来实现
+	go CallBackTimeOut(grid)
+
+}
+
+func GetCallBack(grid uint32) (uint32, msf.CLIENT_ID){
+	cbMutex.Lock()
+	rcID, ok := gCbMap[grid]
+	delete(gCbMap, grid)
+	cbMutex.Unlock()
+
+	if ok {
+		return rcID[0].(uint32), rcID[1].(msf.CLIENT_ID)
+	} else {
+		msf.ERROR_LOG("call back get error %v", grid)
+		return 0, ""
+	}
 }

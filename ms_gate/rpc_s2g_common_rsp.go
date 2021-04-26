@@ -22,16 +22,10 @@ func (r *RpcS2GCommonRspHandler) Process(session *msf.Session) {
 	// 根据GRid找到clientID:Rid，将GRid替换成Rid，然后把Error和Reply透传给client
 	msf.DEBUG_LOG("RpcS2GCommonRspHandler: %+v", r.req)
 
-	rcIDChan := make(chan []interface{})
-	gCbChan <- []interface{}{"get&del", r.req.GRid, rcIDChan}
-	
-	rcID := <- rcIDChan
-	if nil == rcID {
+	rid, clientID := GetCallBack(r.req.GRid)
+	if 0 == rid {
 		return
 	}
-
-	rid := rcID[0].(uint32)
-	clientID := rcID[1].(msf.CLIENT_ID)
 
 	rc := msf.GetClient(clientID)
 	if nil == rc {

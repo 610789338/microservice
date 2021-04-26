@@ -7,74 +7,53 @@ import (
 	"time"
 	"io"
 	"reflect"
+	"sync"
 )
 
-// 单个实例唯一的gid
-var globalGID uint32 = 0
 var rpcMgr *msf.SimpleRpcMgr = nil
 
 type CallBack func(err string, result map[string]interface{})
-var gCbMap map[uint32] CallBack
-var gCbMapMaxSize = 100
-var gCbChan chan []interface{}
+var gCbMap = make(map[uint32] CallBack)
+var gCbMapMaxSize = 10000
+var cbMutex sync.Mutex
 
 // 利用time.After实现callback的超时控制，避免gCbMap被撑爆
 func CallBackTimeOut(rid uint32) {
 	select {
 	case <- time.After(time.Second * 20):
-		gCbChan <- []interface{}{"get&del", rid, nil}
-	}
-}
-
-func CallBackMgr() {
-
-	for true {
-		elem := <- gCbChan
-		oper := elem[0].(string)
-
-		if "add" == oper {
-			rid := elem[1].(uint32)
-			cb := CallBack(elem[2].(func(err string, result map[string]interface{})))
-
-			if len(gCbMap) >= gCbMapMaxSize {
-				msf.WARN_LOG("========================= call back cache size %v > %v", len(gCbMap), gCbMapMaxSize)
-				// return
-			}
-
-			gCbMap[rid] = cb
-
-			go CallBackTimeOut(rid)
-
-		} else if "get&del" == oper {
-			rid := elem[1].(uint32)
-			cb, ok := gCbMap[rid]
-
-			cbChan := elem[2]
-			if ok {
-				if cbChan != nil {
-					cbChan.(chan interface{}) <- cb
-				}
-				delete(gCbMap, rid)
-
-			} else {
-				if cbChan != nil {
-					cbChan.(chan interface{}) <- nil
-					msf.ERROR_LOG("call back get error %v", rid)
-				}
-			}
+		cbMutex.Lock()
+		_, ok := gCbMap[rid]
+		if ok {
+			msf.ERROR_LOG("call back timeout %v", rid)
 		}
+		delete(gCbMap, rid)
+		cbMutex.Unlock()
 	}
 }
 
-func CallBackMgrStart() {
-	gCbMap = make(map[uint32] CallBack)
-	gCbChan = make(chan []interface{})
-	go CallBackMgr()
+func AddCallBack(rid uint32, callback CallBack) {
+	cbMutex.Lock()
+	gCbMap[rid] = callback
+	cbMutex.Unlock()
+
+	go CallBackTimeOut(rid)
+}
+
+func GetCallBack(rid uint32) CallBack {
+	cbMutex.Lock()
+	callback, ok := gCbMap[rid]
+	delete(gCbMap, rid)
+	cbMutex.Unlock()
+
+	if ok {
+		return callback
+	} else {
+		msf.ERROR_LOG("call back get error %v", rid)
+		return nil
+	}
 }
 
 func Init() {
-	CallBackMgrStart()
-
 	msf.CreateSimpleRpcMgr()
 	
 	rpcMgr = msf.GetRpcMgr()
@@ -195,7 +174,7 @@ func (g *ServiceProxy) RpcCall(rpcName string, args ...interface{}) {
 		t := reflect.TypeOf(lastArg)
 		if t.Kind() == reflect.Func {
 			rid = GenGid()
-			gCbChan <- []interface{}{"add", rid, lastArg}
+			AddCallBack(rid, lastArg.(CallBack))
 			args = args[:len(args)-1]
 		}
 	}
@@ -206,7 +185,16 @@ func (g *ServiceProxy) RpcCall(rpcName string, args ...interface{}) {
 	g.Gp.RpcCall(msf.MSG_C2G_RPC_ROUTE, g.Namespace, g.ServiceName, rid, innerRpc)
 }
 
+// 单个实例唯一的gid
+var globalGID uint32 = 0
+var gidMutex sync.Mutex
+
 func GenGid() uint32 {
+	var ret uint32
+	gidMutex.Lock()
 	globalGID += 1
-	return globalGID
+	ret = globalGID
+	gidMutex.Unlock()
+
+	return ret
 }

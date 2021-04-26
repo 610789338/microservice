@@ -3,6 +3,7 @@ package ms_framework
 import (
 	"time"
 	"errors"
+	"sync"
 )
 
 func ReadInt8(buf []byte) int8 {
@@ -122,16 +123,6 @@ func WriteUint64(buf []byte, v uint64) {
 	buf[7] = byte(v & 0xFF)
 }
 
-// func WriteFloat32(buf []byte, v float32) {
-// 	n := math.Float32bits(v)
-// 	WriteUint32(buf, n)
-// }
-
-// func WriteFloat64(buf []byte, v float64) {
-// 	n := math.Float64bits(v)
-// 	WriteUint64(buf, n)
-// }
-
 func WriteString(buf []byte, v string) {
 	copy(buf, v)
 	buf[len(v)] = 0
@@ -143,8 +134,14 @@ func GetNowTimestamp() int64 {
 
 // 单个实例唯一的gid
 var globalGID uint32 = 0
+var gidMutex sync.Mutex
 
 func GenGid() uint32 {
+	var ret uint32
+	gidMutex.Lock()
 	globalGID += 1
-	return globalGID
+	ret = globalGID
+	gidMutex.Unlock()
+
+	return ret
 }

@@ -22,11 +22,8 @@ func (r *RpcCommonRspHandler) GetRspPtr() interface{} {return nil}
 func (r *RpcCommonRspHandler) Process(session *msf.Session) {
 	// msf.DEBUG_LOG("[RpcCommonRspHandler] rid(%v) error(%v) reply(%v)", r.req.Rid, r.req.Error, r.req.Reply)
 
-	cbChan := make(chan interface{})
-	gCbChan <- []interface{}{"get&del", r.req.Rid, cbChan}
-	
-	cb := <- cbChan
+	cb := GetCallBack(r.req.Rid)
 	if cb != nil {
-		cb.(CallBack)(r.req.Error, r.req.Reply)
+		cb(r.req.Error, r.req.Reply)
 	}
 }

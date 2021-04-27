@@ -4,7 +4,7 @@ import (
 	"net"
 	"fmt"
 	msf "ms_framework"
-	"time"
+	// "time"
 	"io"
 	"reflect"
 	"sync"
@@ -13,51 +13,12 @@ import (
 var rpcMgr *msf.SimpleRpcMgr = nil
 
 type CallBack func(err string, result map[string]interface{})
-var gCbMap = make(map[uint32] CallBack)
-var gCbMapMaxSize = 10000
-var cbMutex sync.Mutex
-
-// 利用time.After实现callback的超时控制，避免gCbMap被撑爆
-func CallBackTimeOut(rid uint32) {
-	select {
-	case <- time.After(time.Second * 20):
-		cbMutex.Lock()
-		_, ok := gCbMap[rid]
-		if ok {
-			msf.ERROR_LOG("call back timeout %v", rid)
-		}
-		delete(gCbMap, rid)
-		cbMutex.Unlock()
-	}
-}
-
-func AddCallBack(rid uint32, callback CallBack) {
-	cbMutex.Lock()
-	gCbMap[rid] = callback
-	cbMutex.Unlock()
-
-	go CallBackTimeOut(rid)
-}
-
-func GetCallBack(rid uint32) CallBack {
-	cbMutex.Lock()
-	callback, ok := gCbMap[rid]
-	delete(gCbMap, rid)
-	cbMutex.Unlock()
-
-	if ok {
-		return callback
-	} else {
-		msf.ERROR_LOG("call back get error %v", rid)
-		return nil
-	}
-}
 
 func Init() {
 	msf.CreateSimpleRpcMgr()
 	
 	rpcMgr = msf.GetRpcMgr()
-	rpcMgr.RegistRpcHandler(msf.MSG_COMMON_RSP, func() msf.RpcHandler {return new(RpcCommonRspHandler)})
+	rpcMgr.RegistRpcHandler(msf.MSG_G2C_RPC_RSP, func() msf.RpcHandler {return new(RpcG2CRpcRspHandler)})
 }
 
 type GateProxy struct {
@@ -174,7 +135,7 @@ func (g *ServiceProxy) RpcCall(rpcName string, args ...interface{}) {
 		t := reflect.TypeOf(lastArg)
 		if t.Kind() == reflect.Func {
 			rid = GenGid()
-			AddCallBack(rid, lastArg.(CallBack))
+			msf.AddCallBack(rid, []interface{}{lastArg.(CallBack)})
 			args = args[:len(args)-1]
 		}
 	}

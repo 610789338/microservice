@@ -10,7 +10,7 @@ import (
 type CLIENT_ID string  // RemoteAddr()
 type CONN_ID CLIENT_ID
 
-var RECV_BUF_MAX_LEN uint32 = 1024*1024  // 1M
+var RECV_BUF_MAX_LEN uint32 = 10*1024*1024  // 10M
 
 type TcpServer struct {
 	ip 			string
@@ -65,6 +65,7 @@ func (s *TcpServer) Start() {
 			recvBuf: make([]byte, RECV_BUF_MAX_LEN),
 			remainLen: 0,
 			exit: false,
+			lastActiveTime: GetNowTimestampMs(),
 		}
 		go s.clients[cID].HandleRead()
 	}
@@ -98,6 +99,22 @@ func (c *TcpClient) HandleRead() {
 			e, ok := err.(*net.OpError)
 			if ok && e.Timeout() == true {
 				// WARN_LOG("read timeout %v", err)
+
+				// heart beat
+				now := GetNowTimestampMs()
+				if now - c.lastActiveTime > 10*1000 {
+
+					if now - c.lastActiveTime > 20*1000 {
+						ERROR_LOG("tcp connect heartbeat timeout %v", c.conn.RemoteAddr(), now, c.lastActiveTime)
+						break
+					}
+
+					rpc := rpcMgr.RpcEncode(MSG_HEART_BEAT_REQ)
+					msg := rpcMgr.MessageEncode(rpc)
+					if !c.HeartBeat(msg) {
+						break
+					}
+				}
 				continue
 			}
 
@@ -113,15 +130,17 @@ func (c *TcpClient) HandleRead() {
 			break
 		}
 
-		c.lastActiveTime = GetNowTimestamp()
+		// INFO_LOG("tcp recv buf %v %v", rLen, c.conn.RemoteAddr())
+
+		c.lastActiveTime = GetNowTimestampMs()
 
 		c.remainLen += uint32(rLen)
-		if c.remainLen > RECV_BUF_MAX_LEN/2 {
-			WARN_LOG("tcp connection buff cache too long!!! %dk > %dk", c.remainLen/1024, RECV_BUF_MAX_LEN/1024)
-			
-		} else if c.remainLen > RECV_BUF_MAX_LEN {
+		if c.remainLen > RECV_BUF_MAX_LEN {
 			ERROR_LOG("tcp connection buff cache overflow!!! %dk > %dk", c.remainLen/1024, RECV_BUF_MAX_LEN/1024)
 			break
+			
+		} else if c.remainLen > RECV_BUF_MAX_LEN/2 {
+			WARN_LOG("tcp connection buff cache too long!!! %dk > %dk", c.remainLen/1024, RECV_BUF_MAX_LEN/2/1024)
 		}
 
 		procLen := rpcMgr.MessageDecode(c.Turn2Session(), c.recvBuf[:c.remainLen])
@@ -133,7 +152,6 @@ func (c *TcpClient) HandleRead() {
 		}
 
 		copy(c.recvBuf, c.recvBuf[procLen: procLen + c.remainLen])
-		// INFO_LOG("tcp recv buf %v", rLen)
 	}
 }
 
@@ -158,9 +176,21 @@ func (c *TcpClient) Turn2Session() *Session {
 	return &Session{typ: SessionTcpClient, id: string(c.id), conn: c.conn}
 }
 
-// func (c *TcpClient) HeartBeat() {
-	
-// }
+func (c *TcpClient) HeartBeat(msg []byte) bool {
+	if len(msg) != 0 {
+		wLen, err := c.conn.Write(msg)
+		if err != nil {
+			ERROR_LOG("send heart beat write %v error %v", c.conn.RemoteAddr(), err)
+			return false
+		}
+
+		if wLen != len(msg) {
+			WARN_LOG("send heart beat write len(%v) != rsp msg len(%v) @%v", wLen, len(msg), c.conn.RemoteAddr())
+		}
+	}
+
+	return true
+}
 
 var tcpServer *TcpServer = nil
 

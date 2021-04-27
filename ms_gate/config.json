@@ -1,8 +1,8 @@
 {
   "namespace": "YJ",
   "service": "GateService",
-  "port": 8888,
-  "logLevel": "INFO",
+  "port": 8886,
+  "logLevel": "DEBUG",
   "etcd":{
     "host": "127.0.0.1",
     "port": 2379

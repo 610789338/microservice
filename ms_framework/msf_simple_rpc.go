@@ -47,13 +47,13 @@ var MAX_PACKET_SIZE uint32 = 16*1024  // 16K
 var MESSAGE_SIZE_LEN uint32 = 4
 var RID_LEN uint32 = 4
 
-var MSG_C2G_RPC_ROUTE 	= "a"  // client to gate rpc route
-var MSG_G2S_RPC_CALL 	= "b"  // gate to service rpc call
-var MSG_COMMON_RSP 		= "c"  // common response include s2g && g2c
+var MSG_C2G_RPC_ROUTE 			= "a"  // client to gate rpc route
+var MSG_G2S_RPC_CALL 			= "b"  // gate to service rpc call
+var MSG_S2G_RPC_RSP 			= "c"  // s2g rpc response include
+var MSG_G2C_RPC_RSP 			= "d"  // g2c rpc response include
+var MSG_HEART_BEAT_REQ 			= "e"  // heart beat request
+var MSG_HEART_BEAT_RSP 			= "f"  // heart beat response
 
-type encodeWithoutFieldName interface {
-	EncodeWithoutFieldName ()
-}
 
 func ReadPacketLen(buf []byte) uint32 {
 	return ReadUint32(buf)
@@ -84,17 +84,6 @@ type SimpleRpcMgr struct {
 }
 
 func (rmgr *SimpleRpcMgr) RegistRpcHandler(name string, gen RpcHanderGenerator) {
-	rpc := gen()
-	ptrValue := reflect.ValueOf(rpc.GetReqPtr())
-	if ptrValue.Kind() != reflect.Ptr {
-		panic("rpc.GetReqPtr() must return a pointer")
-	}
-
-	stValue := ptrValue.Elem()
-	if stValue.Kind() != reflect.Struct {
-		panic("rpc.GetReqPtr() must be struct")
-	}
-
 	_, ok := rmgr.rpcs[name]
 	if ok {
 		panic(fmt.Sprintf("RegistRpcHandler %s repeat !!!", name))
@@ -144,54 +133,33 @@ func (rmgr *SimpleRpcMgr) RpcDecode(session *Session, buf []byte) {
 	var rpcName string
 	decoder.Decode(&rpcName)
 
-	handerGen, ok := rmgr.rpcs[rpcName]
+	handlerGen, ok := rmgr.rpcs[rpcName]
 	if !ok {
 		ERROR_LOG("rpc %s not exist", rpcName)
 		return
 	}
 
-	rpcHandler := handerGen()
-	reqPtr := reflect.ValueOf(rpcHandler.GetReqPtr())
-	stValue := reqPtr.Elem()
-	for i := 0; i < stValue.NumField(); i++ {
-		nv := reflect.New(stValue.Field(i).Type())
-		if err := decoder.Decode(nv.Interface()); err != nil {
-			ERROR_LOG("rpc(%s) arg(%s-%v) decode error: %v", rpcName, stValue.Type().Field(i).Name, nv.Type(), err)
-			return
-		}
+	rpcHandler := handlerGen()
+	if rpcHandler.GetReqPtr() != nil {
+		reqPtr := reflect.ValueOf(rpcHandler.GetReqPtr())
+		stValue := reqPtr.Elem()
+		for i := 0; i < stValue.NumField(); i++ {
+			nv := reflect.New(stValue.Field(i).Type())
+			if err := decoder.Decode(nv.Interface()); err != nil {
+				ERROR_LOG("rpc(%s) arg(%s-%v) decode error: %v", rpcName, stValue.Type().Field(i).Name, nv.Type(), err)
+				return
+			}
 
-		stValue.Field(i).Set(nv.Elem())
+			stValue.Field(i).Set(nv.Elem())
+		}
 	}
 
 	rpcHandler.Process(session)
 
-	rspPtr := reflect.ValueOf(rpcHandler.GetRspPtr())
-	if rpcHandler.GetRspPtr() == nil || rspPtr.IsNil() {
-		return
-	}
-
-	// for response
-	args := []interface{}{}
-	switch rpcHandler.GetRspPtr().(type) {
-	case encodeWithoutFieldName:
-		stValue = rspPtr.Elem()
-		for i := 0; i < stValue.NumField(); i++ {
-			args = append(args, stValue.Field(i).Interface())
-		}
-
-	default:
-		stMap := make(map[string]interface{})
-		stValue = rspPtr.Elem()
-		for i := 0; i < stValue.NumField(); i++ {
-			stMap[stValue.Type().Field(i).Name] = stValue.Field(i).Interface()
-		}
-
-		args = append(args, stMap)
-	}
-
-	rpc := rmgr.RpcEncode(MSG_COMMON_RSP, args...)
-	msg := rmgr.MessageEncode(rpc)
-	session.SendResponse(msg)
+	// rspPtr := reflect.ValueOf(rpcHandler.GetRspPtr())
+	// if rpcHandler.GetRspPtr() == nil || rspPtr.IsNil() {
+	// 	return
+	// }
 }
 
 func (rmgr *SimpleRpcMgr) MessageEncode(buf []byte) []byte {
@@ -239,7 +207,11 @@ func CreateSimpleRpcMgr() {
 	rpcMgr = &SimpleRpcMgr{rpcs: make(map[string]RpcHanderGenerator)}
 
 	// default handler
-	rpcMgr.RegistRpcHandler(MSG_G2S_RPC_CALL, func() RpcHandler {return new(RpcG2SRpcCallHandler)})
+	rpcMgr.RegistRpcHandler(MSG_G2S_RPC_CALL, 		func() RpcHandler {return new(RpcG2SRpcCallHandler)})  	// for service
+	rpcMgr.RegistRpcHandler(MSG_C2G_RPC_ROUTE, 		func() RpcHandler {return new(RpcC2GRpcRouteHandler)}) 	// for gate
+	rpcMgr.RegistRpcHandler(MSG_S2G_RPC_RSP, 		func() RpcHandler {return new(RpcS2GRpcRspHandler)})   	// for gate
+	rpcMgr.RegistRpcHandler(MSG_HEART_BEAT_REQ, 	func() RpcHandler {return new(RpcHeartBeatReqHandler)}) // for all
+	rpcMgr.RegistRpcHandler(MSG_HEART_BEAT_RSP,		func() RpcHandler {return new(RpcHeartBeatRspHandler)}) // for all
 }
 
 func RegistRpcHandler(name string, gen RpcHanderGenerator) {

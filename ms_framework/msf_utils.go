@@ -132,6 +132,10 @@ func GetNowTimestamp() int64 {
 	return time.Now().Unix()
 }
 
+func GetNowTimestampMs() int64 {
+	return time.Now().UnixNano() / 1e6
+}
+
 // 单个实例唯一的gid
 var globalGID uint32 = 0
 var gidMutex sync.Mutex

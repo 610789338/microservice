@@ -21,11 +21,17 @@ func main() {
 	// methodName := "rpc_test1"
 
 	startTs := time.Now().UnixNano() / 1e6
-	var total, do, i int32 = 100000, 0, 0
-	for ; i <= total; i++ {
+	time.Sleep(time.Millisecond)
+	var total, do, i int32 = 0, -1, 0
+	for ; i < total; i++ {
 		TestService.RpcCall(methodName, i, rand.Float32(), "abc", map[string]interface{}{"key1": rand.Int63(), "key2": "def"}, []int32{rand.Int31(), rand.Int31()}, 
 		// TestService.RpcCall(methodName, i, 
 		clientsdk.CallBack(func(err string, reply map[string]interface{}) {
+			if err != "" {
+				msf.ERROR_LOG("[%s] response: err(%v) reply(%v)", methodName, err, reply)
+				return
+			}
+
 			// msf.INFO_LOG("[%s] response: err(%v) reply(%v)", methodName, err, reply)
 			// var req int32
 			// switch reply["Req"].(type){

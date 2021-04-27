@@ -2,7 +2,7 @@
   "namespace": "YJ",
   "service": "TestService",
   "port": 6666,
-  "logLevel": "INFO",
+  "logLevel": "DEBUG",
   "etcd":{
     "host": "127.0.0.1",
     "port": 2379

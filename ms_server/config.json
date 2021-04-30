@@ -3,10 +3,7 @@
   "service": "TestService",
   "port": 6666,
   "logLevel": "DEBUG",
-  "etcd":{
-    "host": "127.0.0.1",
-    "port": 2379
-   },
+  "etcd": ["10.246.52.85:2379"],
   "busiCfg":{
     "test1": 12345,
     "test2": "12345"

@@ -35,7 +35,7 @@ func (rmgr *RemoteMgr) Start() {
 		case add := <- rmgr.addChan:
 			INFO_LOG("OnRemoteDiscover %s:%s @%s:%s", add[0], add[1], add[2], add[3])
 			port, _ := strconv.Atoi(add[3])
-			rmgr.ConnectRemote(add[0], add[1], add[2], uint32(port))
+			go rmgr.ConnectRemote(add[0], add[1], add[2], uint32(port))
 
 		case del := <- rmgr.delChan:
 			remoteID, connID := REMOTE_ID(del[0]), CONN_ID(del[1])

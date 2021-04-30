@@ -39,6 +39,10 @@ func Init() {
 
 func Start() {
 	INFO_LOG("ms start ...")
+
+	etcdDriver := EtcdDriver{}
+	etcdDriver.New()
+
 	TcpServerStart()
 	INFO_LOG("ms stop ...")
 }

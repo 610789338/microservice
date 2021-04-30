@@ -17,7 +17,7 @@ type GlobalConfig struct {
     Service     string
     Port        int
     LogLevel    string
-    Etcd        EtcdConfig
+    Etcd        []string
 }
 
 var GlobalCfg GlobalConfig

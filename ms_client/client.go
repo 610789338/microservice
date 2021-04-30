@@ -22,7 +22,7 @@ func main() {
 
 	startTs := time.Now().UnixNano() / 1e6
 	time.Sleep(time.Millisecond)
-	var total, do, i int32 = 0, -1, 0
+	var total, do, i int32 = 100, 0, 0
 	for ; i < total; i++ {
 		TestService.RpcCall(methodName, i, rand.Float32(), "abc", map[string]interface{}{"key1": rand.Int63(), "key2": "def"}, []int32{rand.Int31(), rand.Int31()}, 
 		// TestService.RpcCall(methodName, i, 

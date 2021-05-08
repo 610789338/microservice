@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 	"io"
+	"sync"
 )
 
 type CLIENT_ID string  // RemoteAddr()
@@ -12,11 +13,21 @@ type CONN_ID CLIENT_ID
 
 var RECV_BUF_MAX_LEN uint32 = 10*1024*1024  // 10M
 
+func GetClientID(c net.Conn) CLIENT_ID {
+	return CLIENT_ID(GetConnID(c))
+}
+
+func GetConnID(c net.Conn) CONN_ID {
+	return CONN_ID(c.RemoteAddr().String())  // ip:port
+}
+
 type TcpServer struct {
 	ip 			string
 	port 		int
 	listener 	net.Listener
 	clients  	map[CLIENT_ID]*TcpClient
+	stop 		bool
+	mutex		sync.Mutex
 }
 
 type TcpClient struct {
@@ -28,30 +39,25 @@ type TcpClient struct {
 	lastActiveTime  int64
 }
 
-func GetClientID(c net.Conn) CLIENT_ID {
-	return CLIENT_ID(GetConnID(c))
-}
-
-func GetConnID(c net.Conn) CONN_ID {
-	return CONN_ID(c.RemoteAddr().String())
-}
-
 func (s *TcpServer) Start() {
-	l, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.ip, s.port))
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.ip, s.port))
 	if err != nil {
 		panic(fmt.Sprintf("CreateTcpServer error %s:%d - %v", s.ip, s.port, err))
 	}
 	defer func() {
-		s.Close()
+		s.Stop()
 	} ()
 
-	INFO_LOG("tcp server listen at %s:%d", s.ip, s.port)
+	s.listener = listener
+	INFO_LOG("tcp server listen at %v", s.listener.Addr())
 
-	s.listener = l
-
-	for true {
+	for !s.stop {
 		conn, err := s.listener.Accept()
 		if err != nil {
+			if s.stop {
+				break
+			}
+
 			ERROR_LOG("tcp server accept error %v", err)
 			continue
 		}
@@ -59,6 +65,14 @@ func (s *TcpServer) Start() {
 		INFO_LOG("tcp server(%s:%d) accept client %v", s.ip, s.port, conn.RemoteAddr())
 
 		cID := GetClientID(conn)
+
+		s.mutex.Lock()
+
+		if s.stop {
+			s.mutex.Unlock()
+			break
+		}
+
 		s.clients[cID] = &TcpClient{
 			id: cID, 
 			conn: conn, 
@@ -67,28 +81,53 @@ func (s *TcpServer) Start() {
 			exit: false,
 			lastActiveTime: GetNowTimestampMs(),
 		}
+		s.mutex.Unlock()
+
 		go s.clients[cID].HandleRead()
 	}
 }
 
-func (s *TcpServer) Close(){
-	INFO_LOG("tcp server(%s:%d) close...", s.ip, s.port)
+func (s *TcpServer) Stop(){
+	INFO_LOG("tcp server(%s:%d) close start ... %+v", s.ip, s.port, s)
+
+	if s.stop {
+		return
+	}
+
+	s.mutex.Lock()
 	for _, client := range s.clients {
 		client.exit = true
 	}
 
-	for len(s.clients) != 0 {}
+	s.stop = true
 
-	s.listener.Close()
+	if s.listener != nil {
+		s.listener.Close()
+	}
+	s.mutex.Unlock()
+
+	// wait all client close
+	for true {
+		s.mutex.Lock()
+		if len(s.clients) == 0 {
+			s.mutex.Unlock()
+			break
+		}
+		
+		s.mutex.Unlock()
+	}
+
+	INFO_LOG("tcp server(%s:%d) close...", s.ip, s.port)
 }
 
 func (s *TcpServer) onClientClose(c *TcpClient){
+	s.mutex.Lock()
 	delete(s.clients, GetClientID(c.conn))
+	s.mutex.Unlock()
 }
 
 func (c *TcpClient) HandleRead() {
 	defer func() {
-		INFO_LOG("tcp client close %v", c.conn.RemoteAddr())
 		c.Close()
 	} ()
 
@@ -156,6 +195,7 @@ func (c *TcpClient) HandleRead() {
 }
 
 func (c *TcpClient) Close() {
+	INFO_LOG("tcp client close %v", c.conn.RemoteAddr())
 	tcpServer.onClientClose(c)
 }
 
@@ -195,11 +235,15 @@ func (c *TcpClient) HeartBeat(msg []byte) bool {
 var tcpServer *TcpServer = nil
 
 func CreateTcpServer(_ip string, _port int) {
-	tcpServer = &TcpServer{ip: _ip, port: _port, clients: make(map[CLIENT_ID]*TcpClient)}
+	tcpServer = &TcpServer{ip: _ip, port: _port, clients: make(map[CLIENT_ID]*TcpClient), stop: false}
 }
 
-func TcpServerStart() {
-	tcpServer.Start()
+func StartTcpServer() {
+	go tcpServer.Start()
+}
+
+func StopTcpServer() {
+	tcpServer.Stop()
 }
 
 func GetClient(clientID CLIENT_ID) *TcpClient {

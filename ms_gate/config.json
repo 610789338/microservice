@@ -3,8 +3,5 @@
   "service": "GateService",
   "port": 8886,
   "logLevel": "DEBUG",
-  "etcd":{
-    "host": "127.0.0.1",
-    "port": 2379
-   }    
+  "etcd": ["10.246.13.142:2379"] 
 }

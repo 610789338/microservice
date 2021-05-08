@@ -4,6 +4,9 @@ import (
 	"time"
 	"errors"
 	"sync"
+	"net"
+	"fmt"
+	"strings"
 )
 
 func ReadInt8(buf []byte) int8 {
@@ -148,4 +151,71 @@ func GenGid() uint32 {
 	gidMutex.Unlock()
 
 	return ret
+}
+
+
+var localIplock sync.Mutex
+var localIp string
+
+// func GetLocalIP() string {
+
+// 	if len(localIp) != 0 {
+// 		return localIp
+// 	}
+
+// 	localIplock.Lock()
+// 	defer localIplock.Unlock()
+
+// 	addrs, err := net.InterfaceAddrs()
+// 	if err != nil {
+// 		panic(fmt.Sprintf("net.InterfaceAddrs err %v", err))
+// 	}
+
+// 	INFO_LOG("GetLocalIP addrs %v", addrs)
+
+// 	for _, address := range addrs {
+// 		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+// 			if ipnet.IP.To4() != nil {
+// 				localIp = ipnet.IP.String()
+// 			}
+// 		}
+// 	}
+
+// 	if len(localIp) == 0 {
+// 		panic(fmt.Sprintf("GetLocalIP err %v", addrs))
+// 	}
+
+// 	INFO_LOG("GetLocalIP %v", localIp)
+// 	return localIp
+// }
+
+func GetLocalIP() string {
+
+	if len(localIp) != 0 {
+		return localIp
+	}
+
+	localIplock.Lock()
+	defer localIplock.Unlock()
+
+	localIp, err := GetOutBoundIP()
+	if err != nil {
+		panic(fmt.Sprintf("GetLocalIP err %v", err))
+	}
+
+	INFO_LOG("GetLocalIP %v", localIp)
+	return localIp
+}
+
+func GetOutBoundIP() (ip string, err error)  {
+    // conn, err := net.Dial("tcp", "golang.org:http")
+    conn, err := net.Dial("tcp", GlobalCfg.Etcd[0])
+    if err != nil {
+        return
+    }
+
+    localAddr := conn.LocalAddr()
+    ip = strings.Split(localAddr.String(), ":")[0]
+
+    return
 }

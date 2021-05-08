@@ -16,7 +16,7 @@ func main() {
 	msf.INFO_LOG("clientsdk start %v", time.Now())
 	clientsdk.Init()
 	gate := clientsdk.CreateGateProxy("127.0.0.1", 8886)
-	TestService := gate.CreateServiceProxy(namespace, "testService")
+	TestService := gate.CreateServiceProxy(namespace, "TestService")
 	methodName := "rpc_test"
 	// methodName := "rpc_test1"
 

@@ -2,16 +2,19 @@ package ms_framework
 
 import (
 	"runtime"
+	"os/signal"
+	"os"
+	"syscall"
 )
 
 
-var USE_SIMPLE_RPC bool = true
-var USE_TCP bool = true
+// var USE_SIMPLE_RPC bool = true
+// var USE_TCP bool = true
 
-type NetServer interface {
-	Start()
-	Close()
-}
+// type NetServer interface {
+// 	Start()
+// 	Close()
+// }
 
 // type RpcMgr interface {
 // 	RegistRpcHandler		(name string, gen RpcHanderGenerator)
@@ -22,27 +25,56 @@ type NetServer interface {
 // 	GetRpcHanderGenerator	(rpcName string) (RpcHanderGenerator, bool)
 // }
 
+// 可重复注册signal handler
+func SignalHander(handler func(), sig ...os.Signal) {
+	sigChan := make(chan os.Signal)
+	signal.Notify(sigChan, sig...)
+	<-sigChan
+	handler()
+}
 
-func OnRemoteDiscover(namespace string, svrName string, ip string, port uint32) {
-	remoteMgr.OnRemoteDiscover(namespace, svrName, ip, port)
+var BusiStop func()
+
+func SetBusiStop(f func()) {
+	BusiStop = f
 }
 
 func Init() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
+	ParseArgs()
+
 	CreateSimpleRpcMgr()
-	CreateTcpServer("", GlobalCfg.Port)
 	CreateRemoteMgr()
 
-	INFO_LOG("ms init ok ...")
+	CreateTcpServer("", GlobalCfg.Port)
+	CreateEtcdDriver()
+
+	INFO_LOG("%s:%s init ok ...", GlobalCfg.Namespace, GlobalCfg.Service)
 }
 
 func Start() {
-	INFO_LOG("ms start ...")
+	INFO_LOG("%s:%s start ...", GlobalCfg.Namespace, GlobalCfg.Service)
 
-	etcdDriver := EtcdDriver{}
-	etcdDriver.New()
+	StartTcpServer()
+	StartEtcdDriver()
 
-	TcpServerStart()
-	INFO_LOG("ms stop ...")
+	// go SignalHander(Stop, syscall.SIGINT, syscall.SIGTERM)
+	
+	exitChan := make(chan os.Signal)
+	signal.Notify(exitChan, syscall.SIGINT, syscall.SIGTERM)
+	<-exitChan
+
+	Stop()
+
+	INFO_LOG("%s:%s stop ...", GlobalCfg.Namespace, GlobalCfg.Service)
+}
+
+func Stop() {
+	if BusiStop != nil {
+		BusiStop()
+	}
+
+	StopEtcdDriver()
+	StopTcpServer()
 }

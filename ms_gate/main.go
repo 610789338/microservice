@@ -9,12 +9,9 @@ import (
 )
 
 func main() {
-
-	msf.ParseArgs()
 	msf.Init()
 
-	msf.OnRemoteDiscover("YJ", "testService", "127.0.0.1", 6666)
-	msf.OnRemoteDiscover("YJ", "testService", "127.0.0.1", 5555)
-	
+	// msf.OnRemoteDiscover("YJ", "testService", "127.0.0.1", 6666)
+	// msf.OnRemoteDiscover("YJ", "testService", "127.0.0.1", 5555)
 	msf.Start()
 }

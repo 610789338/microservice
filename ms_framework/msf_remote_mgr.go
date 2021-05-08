@@ -45,13 +45,18 @@ func (rmgr *RemoteMgr) Start() {
 
 			} else {
 				_, ok := conns[connID]
-				if !ok {
-					ERROR_LOG("remote conn not exist %s @%s", remoteID, connID)
-				}
+				if ok {
+					INFO_LOG("OnRemoteDisappear %s@%v", remoteID, connID)
+					delete(conns, connID)
 
-				INFO_LOG("OnRemoteDisappear %s@%v", remoteID, connID)
-				delete(conns, connID)
+				} else {
+					// ERROR_LOG("remote conn not exist %s @%s", remoteID, connID)
+				}
 			}
+
+		// default:
+		// 	DEBUG_LOG("remote mgr poll...")
+		// 	time.Sleep(time.Second)
 		}
 	}
 }
@@ -68,19 +73,17 @@ func (rmgr *RemoteMgr) OnRemoteDisappear(remoteID REMOTE_ID, connID CONN_ID) {
 
 func (rmgr *RemoteMgr) ConnectRemote(namespace string, svrName string, ip string, port uint32) {
 	retryCnt := 5
-	for true {
-		c, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", ip, port), time.Second)
+	for retryCnt > 0 {
+		c, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", ip, port), 5*time.Second)
 		if err != nil {
 			ERROR_LOG("connect %s:%s @%s:%d fail %v retry(%d)...", namespace, svrName, ip, port, err, retryCnt)
 			time.Sleep(time.Second)
 
 			retryCnt -= 1
-			if retryCnt <= 0 {
-				break
-			}
-
 			continue
 		}
+		
+		INFO_LOG("connect %s:%s @%s:%d success", namespace, svrName, ip, port)
 
 		remoteID := GetRemoteID(namespace, svrName)
 		_, ok := rmgr.remotes[remoteID]
@@ -191,4 +194,14 @@ func ChoiceRemote(remoteID REMOTE_ID) *Remote {
 	}
 
 	return remote
+}
+
+func OnRemoteDiscover(namespace string, svrName string, ip string, port uint32) {
+	remoteMgr.OnRemoteDiscover(namespace, svrName, ip, port)
+}
+
+func OnRemoteDisappear(namespace string, svrName string, ip string, port uint32) {
+	remoteID := GetRemoteID(namespace, svrName)
+	connID := CONN_ID(fmt.Sprintf("%s:%d", ip, port))
+	remoteMgr.OnRemoteDisappear(remoteID, connID)
 }

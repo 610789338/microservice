@@ -1,0 +1,11 @@
+{
+  "namespace": "YJ",
+  "service": "ServiceB",
+  "port": 5555,
+  "logLevel": "DEBUG",
+  "etcd": ["10.246.13.142:2379"],
+  "busiCfg":{
+    "test1": 12345,
+    "test2": "12345"
+   }
+}

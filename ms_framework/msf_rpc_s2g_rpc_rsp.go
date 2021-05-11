@@ -1,6 +1,7 @@
 package ms_framework
 
 import (
+	"net"
 )
 
 
@@ -26,22 +27,29 @@ func (r *RpcS2GRpcRspHandler) Process(session *Session) {
 		return
 	}
 
-	rid, clientID := cbs[0].(uint32), cbs[1].(CLIENT_ID)
+	rid, connID := cbs[0].(uint32), cbs[1].(CONN_ID)
 
-	client := GetClient(clientID)
-	if nil == client {
+	var conn net.Conn
+	if client := GetClient(connID); client != nil {
+		conn = client.conn
+	} else if remote := GetRemote(connID); remote != nil {
+		conn = remote.conn
+	}
+
+	if nil == conn {
+		ERROR_LOG("[RpcS2GRpcRspHandler] connID %s not exist", connID)
 		return
 	}
 
 	rpc := RpcEncode(MSG_G2C_RPC_RSP, rid, r.req.Error, r.req.Reply)
 	msg := MessageEncode(rpc)
 
-	wLen, err := client.Write(msg)
+	wLen, err := conn.Write(msg)
 	if err != nil {
-		ERROR_LOG("write %v error %v", client.RemoteAddr(), err)
+		ERROR_LOG("write %v error %v", conn.RemoteAddr(), err)
 	}
 
 	if wLen != len(msg) {
-		WARN_LOG("write len(%v) != msg len(%v) @%v", wLen, len(msg), client.RemoteAddr())
+		WARN_LOG("write len(%v) != msg len(%v) @%v", wLen, len(msg), conn.RemoteAddr())
 	}
 }

@@ -3,13 +3,56 @@ package ms_framework
 import (
 	"fmt"
 	"net"
-	"strconv"
 	"time"
 	"io"
 	"math/rand"
+	"sync"
 )
 
 type REMOTE_ID string  // namespace:service
+
+type LoadBalancer struct {
+	elements	 	map[string]uint32  // target:weight
+}
+
+func (l *LoadBalancer) AddElement(ele string, weight uint32) bool {
+	_, ok := l.elements[ele]
+	if ok {
+		ERROR_LOG("[LoadBalancer] add element error %s already exist", ele)
+		return false
+	}
+
+	l.elements[ele] = weight
+
+	return true
+}
+
+func (l *LoadBalancer) DelElement(ele string) bool {
+	_, ok := l.elements[ele]
+	if !ok {
+		ERROR_LOG("[LoadBalancer] del element error %s not exist", ele)
+		return false
+	}
+
+	delete(l.elements, ele)
+
+	return true
+}
+
+func (l *LoadBalancer) LoadBalance() string {
+	// 简陋版的负载均衡
+	var ele string
+	idx := rand.Intn(len(l.elements))
+	for ele = range(l.elements) {
+		if idx <= 0 {
+			break
+		}
+
+		idx -= 1
+	}
+
+	return ele
+}
 
 /*
  * 用于gate服务发现
@@ -17,9 +60,9 @@ type REMOTE_ID string  // namespace:service
  * 根据换成做路由负载均衡
  */
 type RemoteMgr struct {
-	remotes  	map[REMOTE_ID]map[CONN_ID]*Remote
-	addChan		chan []string
-	delChan		chan []string
+	remotes  		map[CONN_ID]*Remote
+	lbs				map[REMOTE_ID]*LoadBalancer
+	mutex			sync.RWMutex
 }
 
 type Remote struct {
@@ -29,52 +72,12 @@ type Remote struct {
 	remainLen 		uint32
 }
 
-func (rmgr *RemoteMgr) Start() {
-	for true {
-		select {
-		case add := <- rmgr.addChan:
-			INFO_LOG("OnRemoteDiscover %s:%s @%s:%s", add[0], add[1], add[2], add[3])
-			port, _ := strconv.Atoi(add[3])
-			go rmgr.ConnectRemote(add[0], add[1], add[2], uint32(port))
-
-		case del := <- rmgr.delChan:
-			remoteID, connID := REMOTE_ID(del[0]), CONN_ID(del[1])
-			conns, ok := rmgr.remotes[remoteID]
-			if !ok {
-				ERROR_LOG("remote not exist %s", remoteID)
-
-			} else {
-				_, ok := conns[connID]
-				if ok {
-					INFO_LOG("OnRemoteDisappear %s@%v", remoteID, connID)
-					delete(conns, connID)
-
-				} else {
-					// ERROR_LOG("remote conn not exist %s @%s", remoteID, connID)
-				}
-			}
-
-		// default:
-		// 	DEBUG_LOG("remote mgr poll...")
-		// 	time.Sleep(time.Second)
-		}
-	}
-}
-
 func (rmgr *RemoteMgr) OnRemoteDiscover(namespace string, svrName string, ip string, port uint32) {
-	// INFO_LOG("OnRemoteDiscover %v %v", namespace, svrName)
-	rmgr.addChan <- []string{namespace, svrName, ip, fmt.Sprintf("%d", port)}
-}
-
-func (rmgr *RemoteMgr) OnRemoteDisappear(remoteID REMOTE_ID, connID CONN_ID) {
-	// INFO_LOG("OnRemoteDisappear %v %v %+v", remoteID, connID, rmgr)
-	rmgr.delChan <- []string{string(remoteID), string(connID)}
-}
-
-func (rmgr *RemoteMgr) ConnectRemote(namespace string, svrName string, ip string, port uint32) {
+	INFO_LOG("OnRemoteDiscover %v %v", namespace, svrName)
+	
 	retryCnt := 5
 	for retryCnt > 0 {
-		c, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", ip, port), 5*time.Second)
+		err := rmgr.ConnectRemote(namespace, svrName, ip, port)
 		if err != nil {
 			ERROR_LOG("connect %s:%s @%s:%d fail %v retry(%d)...", namespace, svrName, ip, port, err, retryCnt)
 			time.Sleep(time.Second)
@@ -82,25 +85,66 @@ func (rmgr *RemoteMgr) ConnectRemote(namespace string, svrName string, ip string
 			retryCnt -= 1
 			continue
 		}
-		
-		INFO_LOG("connect %s:%s @%s:%d success", namespace, svrName, ip, port)
 
-		remoteID := GetRemoteID(namespace, svrName)
-		_, ok := rmgr.remotes[remoteID]
-		if !ok {
-			rmgr.remotes[remoteID] = make(map[CONN_ID]*Remote)
-		}
-
-		rmgr.remotes[remoteID][GetConnID(c)] = &Remote{
-			id: remoteID,
-			conn: c,
-			recvBuf: make([]byte, RECV_BUF_MAX_LEN),
-			remainLen: 0,
-		}
-
-		go rmgr.remotes[remoteID][GetConnID(c)].HandleRead()
 		break
 	}
+}
+
+func (rmgr *RemoteMgr) OnRemoteDisappear(remoteID REMOTE_ID, connID CONN_ID) {
+	INFO_LOG("OnRemoteDisappear %v %v", remoteID, connID)
+
+	rmgr.mutex.Lock()
+	defer rmgr.mutex.Unlock()
+
+	_, ok := rmgr.remotes[connID]
+	if !ok {
+		// ERROR_LOG("remote not exist %s", remoteID)
+	} else {
+		INFO_LOG("OnRemoteDisappear %s@%v", remoteID, connID)
+		
+		delete(rmgr.remotes, connID)
+		rmgr.lbs[remoteID].DelElement(string(connID))
+	}
+}
+
+func (rmgr *RemoteMgr) ConnectRemote(namespace string, svrName string, ip string, port uint32) error {
+	c, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", ip, port), 5*time.Second)
+	if err != nil {
+		return err
+	}
+	
+	INFO_LOG("connect %s:%s @%s:%d success", namespace, svrName, ip, port)
+
+	rmgr.mutex.Lock()
+	defer rmgr.mutex.Unlock()
+
+	connID := GenConnIDByIPPort(ip, port)
+	_, ok := rmgr.remotes[connID]
+	if ok {
+		ERROR_LOG("repeate remote %s", connID)
+		return nil
+	}
+
+	remoteID := GetRemoteID(namespace, svrName)
+	_, ok = rmgr.lbs[remoteID]
+	if !ok {
+		rmgr.lbs[remoteID] = &LoadBalancer{elements: make(map[string]uint32)}
+	}
+
+	if !rmgr.lbs[remoteID].AddElement(string(connID), 0) {
+		return nil
+	}
+
+	rmgr.remotes[connID] = &Remote{
+		id: remoteID,
+		conn: c,
+		recvBuf: make([]byte, RECV_BUF_MAX_LEN),
+		remainLen: 0,
+	}
+
+	go rmgr.remotes[connID].HandleRead()
+
+	return nil
 }
 
 func (r *Remote) HandleRead() {
@@ -157,19 +201,16 @@ func (r *Remote) RemoteAddr() net.Addr {
 }
 
 func (r *Remote) Turn2Session() *Session {
-	return &Session{typ: SessionRemote, id: string(r.id), conn: r.conn}
+	return &Session{typ: SessionRemote, id: string(GetConnID(r.conn)), conn: r.conn}
 }
 
 var remoteMgr *RemoteMgr = nil
 
 func CreateRemoteMgr() {
 	remoteMgr = &RemoteMgr{
-		remotes: make(map[REMOTE_ID]map[CONN_ID]*Remote),
-		addChan: make(chan []string),
-		delChan: make(chan []string),
+		remotes: make(map[CONN_ID]*Remote),
+		lbs:	 make(map[REMOTE_ID]*LoadBalancer),
 	}
-
-	go remoteMgr.Start()
 }
 
 func GetRemoteID(namespace string, svrName string) REMOTE_ID {
@@ -177,31 +218,38 @@ func GetRemoteID(namespace string, svrName string) REMOTE_ID {
 }
 
 func ChoiceRemote(remoteID REMOTE_ID) *Remote {
-	conns, ok := remoteMgr.remotes[remoteID]
+	lbs, ok := remoteMgr.lbs[remoteID]
 	if !ok {
 		return nil
 	}
 
-	// 负载均衡
-	var remote *Remote = nil
-	idx := rand.Intn(len(conns))
-	for _, remote = range(conns) {
-		if idx <= 0 {
-			break
-		}
+	connID := CONN_ID(lbs.LoadBalance())
+	remote, ok := remoteMgr.remotes[connID]
+	if !ok {
+		return nil
+	}
 
-		idx -= 1
+	return remote
+}
+
+func GetRemote(connID CONN_ID) *Remote {
+	remoteMgr.mutex.RLock()
+	defer remoteMgr.mutex.RUnlock()
+
+	remote, ok := remoteMgr.remotes[connID]
+	if !ok {
+		return nil
 	}
 
 	return remote
 }
 
 func OnRemoteDiscover(namespace string, svrName string, ip string, port uint32) {
-	remoteMgr.OnRemoteDiscover(namespace, svrName, ip, port)
+	go remoteMgr.OnRemoteDiscover(namespace, svrName, ip, port)
 }
 
 func OnRemoteDisappear(namespace string, svrName string, ip string, port uint32) {
 	remoteID := GetRemoteID(namespace, svrName)
-	connID := CONN_ID(fmt.Sprintf("%s:%d", ip, port))
-	remoteMgr.OnRemoteDisappear(remoteID, connID)
+	connID := GenConnIDByIPPort(ip, port)
+	go remoteMgr.OnRemoteDisappear(remoteID, connID)
 }

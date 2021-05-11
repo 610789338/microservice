@@ -33,7 +33,7 @@ func AddCallBack(cbid uint32, cbs []interface{}) {
 
 	cbMutex.Unlock()
 
-	// 协程开多了会影响性能，可以考虑用排序链表来实现
+	// TODO：协程开多了会影响性能，可以考虑用排序链表来实现
 	// go CallBackTimeOut(cbid)
 }
 

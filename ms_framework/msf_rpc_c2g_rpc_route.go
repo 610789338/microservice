@@ -41,7 +41,7 @@ func (r *RpcC2GRpcRouteHandler) Process(session *Session) {
 
 		if r.req.Rid != 0 {
 			// must before remote write
-			AddCallBack(grid, []interface{}{r.req.Rid, CLIENT_ID(session.GetID())})
+			AddCallBack(grid, []interface{}{r.req.Rid, CONN_ID(session.GetID())})
 		}
 
 		rpc := RpcEncode(MSG_G2S_RPC_CALL, grid, r.req.InnerRpc)

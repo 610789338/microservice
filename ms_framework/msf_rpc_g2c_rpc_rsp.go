@@ -1,9 +1,4 @@
-package clientsdk
-
-
-import (
-	msf "ms_framework"
-)
+package ms_framework
 
 
 type RpcG2CRpcRspReq struct {
@@ -19,16 +14,14 @@ type RpcG2CRpcRspHandler struct {
 func (r *RpcG2CRpcRspHandler) GetReqPtr() interface{} {return &(r.req)}
 func (r *RpcG2CRpcRspHandler) GetRspPtr() interface{} {return nil}
 
-func (r *RpcG2CRpcRspHandler) Process(session *msf.Session) {
+func (r *RpcG2CRpcRspHandler) Process(session *Session) {
 
-	cbs := msf.GetCallBack(r.req.Rid)
+	cbs := GetCallBack(r.req.Rid)
 	if nil == cbs {
-		msf.ERROR_LOG("RpcG2CRpcRspHandler GetCallBack error %v", r.req.Rid)
+		ERROR_LOG("RpcG2CRpcRspHandler GetCallBack error %v", r.req.Rid)
 		return
 	}
 
-	cb := cbs[0].(CallBack)
-	if cb != nil {
-		cb(r.req.Error, r.req.Reply)
-	}
+	ch := cbs[0].(chan []interface{})
+	ch <- []interface{}{r.req.Error, r.req.Reply}
 }

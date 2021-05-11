@@ -10,15 +10,12 @@ import (
 	"sync"
 )
 
-var rpcMgr *msf.SimpleRpcMgr = nil
 
 type CallBack func(err string, result map[string]interface{})
 
 func Init() {
 	msf.CreateSimpleRpcMgr()
-	
-	rpcMgr = msf.GetRpcMgr()
-	rpcMgr.RegistRpcHandler(msf.MSG_G2C_RPC_RSP, func() msf.RpcHandler {return new(RpcG2CRpcRspHandler)})
+	msf.RegistRpcHandlerForce(msf.MSG_G2C_RPC_RSP, 	func() msf.RpcHandler {return new(RpcG2CRpcRspHandler)})
 }
 
 type GateProxy struct {
@@ -63,7 +60,7 @@ func (g *GateProxy) HandleRead() {
 			break
 		}
 
-		procLen := rpcMgr.MessageDecode(g.Turn2Session(), g.recvBuf[:g.remainLen])
+		procLen := msf.GetRpcMgr().MessageDecode(g.Turn2Session(), g.recvBuf[:g.remainLen])
 		g.remainLen -= procLen
 		if g.remainLen < 0 {
 			msf.ERROR_LOG("g.remainLen(%d) < 0 procLen(%d) @%s", g.remainLen, procLen, g.conn.RemoteAddr())
@@ -76,8 +73,8 @@ func (g *GateProxy) HandleRead() {
 }
 
 func (g *GateProxy) RpcCall(rpcName string, args ...interface{}) {
-	rpc := rpcMgr.RpcEncode(rpcName, args...)
-	msg := rpcMgr.MessageEncode(rpc)
+	rpc := msf.GetRpcMgr().RpcEncode(rpcName, args...)
+	msg := msf.GetRpcMgr().MessageEncode(rpc)
 
 	wLen, err := g.conn.Write(msg)
 	if err != nil {
@@ -142,7 +139,7 @@ func (g *ServiceProxy) RpcCall(rpcName string, args ...interface{}) {
 
 	// msf.DEBUG_LOG("rpc call %s args %v", rpcName, args)
 
-	innerRpc := rpcMgr.RpcEncode(rpcName, args...)
+	innerRpc := msf.GetRpcMgr().RpcEncode(rpcName, args...)
 	g.Gp.RpcCall(msf.MSG_C2G_RPC_ROUTE, g.Namespace, g.ServiceName, rid, innerRpc)
 }
 

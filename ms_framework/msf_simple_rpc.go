@@ -47,10 +47,12 @@ var MAX_PACKET_SIZE uint32 = 16*1024  // 16K
 var MESSAGE_SIZE_LEN uint32 = 4
 var RID_LEN uint32 = 4
 
+// client include mservice/gameserver/gameclient
 var MSG_C2G_RPC_ROUTE 			= "a"  // client to gate rpc route
 var MSG_G2S_RPC_CALL 			= "b"  // gate to service rpc call
-var MSG_S2G_RPC_RSP 			= "c"  // s2g rpc response include
-var MSG_G2C_RPC_RSP 			= "d"  // g2c rpc response include
+var MSG_S2G_RPC_RSP 			= "c"  // service to gate rpc response
+var MSG_G2C_RPC_RSP 			= "d"  // gate to client rpc response
+
 var MSG_HEART_BEAT_REQ 			= "e"  // heart beat request
 var MSG_HEART_BEAT_RSP 			= "f"  // heart beat response
 
@@ -89,6 +91,10 @@ func (rmgr *SimpleRpcMgr) RegistRpcHandler(name string, gen RpcHanderGenerator) 
 		panic(fmt.Sprintf("RegistRpcHandler %s repeat !!!", name))
 	}
 
+	rmgr.rpcs[name] = gen
+}
+
+func (rmgr *SimpleRpcMgr) RegistRpcHandlerForce(name string, gen RpcHanderGenerator) {
 	rmgr.rpcs[name] = gen
 }
 
@@ -207,15 +213,22 @@ func CreateSimpleRpcMgr() {
 	rpcMgr = &SimpleRpcMgr{rpcs: make(map[string]RpcHanderGenerator)}
 
 	// default handler
-	rpcMgr.RegistRpcHandler(MSG_G2S_RPC_CALL, 		func() RpcHandler {return new(RpcG2SRpcCallHandler)})  	// for service
 	rpcMgr.RegistRpcHandler(MSG_C2G_RPC_ROUTE, 		func() RpcHandler {return new(RpcC2GRpcRouteHandler)}) 	// for gate
+	rpcMgr.RegistRpcHandler(MSG_G2S_RPC_CALL, 		func() RpcHandler {return new(RpcG2SRpcCallHandler)})  	// for service
 	rpcMgr.RegistRpcHandler(MSG_S2G_RPC_RSP, 		func() RpcHandler {return new(RpcS2GRpcRspHandler)})   	// for gate
+	rpcMgr.RegistRpcHandler(MSG_G2C_RPC_RSP, 		func() RpcHandler {return new(RpcG2CRpcRspHandler)}) 	// for client
+
+
 	rpcMgr.RegistRpcHandler(MSG_HEART_BEAT_REQ, 	func() RpcHandler {return new(RpcHeartBeatReqHandler)}) // for all
 	rpcMgr.RegistRpcHandler(MSG_HEART_BEAT_RSP,		func() RpcHandler {return new(RpcHeartBeatRspHandler)}) // for all
 }
 
 func RegistRpcHandler(name string, gen RpcHanderGenerator) {
 	rpcMgr.RegistRpcHandler(name, gen)
+}
+
+func RegistRpcHandlerForce(name string, gen RpcHanderGenerator) {
+	rpcMgr.RegistRpcHandlerForce(name, gen)
 }
 
 func MessageEncode(b []byte) []byte {

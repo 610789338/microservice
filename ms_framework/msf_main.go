@@ -67,7 +67,7 @@ func Start() {
 
 	Stop()
 
-	INFO_LOG("%s:%s stop ...", GlobalCfg.Namespace, GlobalCfg.Service)
+	INFO_LOG("%s:%s shutdown ...", GlobalCfg.Namespace, GlobalCfg.Service)
 }
 
 func Stop() {

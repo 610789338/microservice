@@ -16,8 +16,8 @@ func main() {
 	msf.INFO_LOG("clientsdk start %v", time.Now())
 	clientsdk.Init()
 	gate := clientsdk.CreateGateProxy("127.0.0.1", 8886)
-	TestService := gate.CreateServiceProxy(namespace, "TestService")
-	methodName := "rpc_test"
+	TestService := gate.CreateServiceProxy(namespace, "ServiceA")
+	methodName := "rpc_a"
 	// methodName := "rpc_test1"
 
 	startTs := time.Now().UnixNano() / 1e6
@@ -72,8 +72,4 @@ func main() {
 
 	ops = int64(total*1000)/(endTs - startTs)
 	msf.DEBUG_LOG("rtt: startTs %v, endTs %v, ops = %v", startTs, endTs, ops)
-	// TestService.RpcCall(methodName, 10, float32(9.9), "abc", map[string]interface{}{"key1": 10, "key2": "def"}, []int32{123, 456}, 
-	// func(err string, reply map[string]interface{}) {
-	// 	msf.INFO_LOG("%s response: %v %v", methodName, err, reply)
-	// })
 }

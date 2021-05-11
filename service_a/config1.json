@@ -1,0 +1,7 @@
+{
+  "namespace": "YJ",
+  "service": "ServiceA",
+  "port": 6667,
+  "logLevel": "DEBUG",
+  "etcd": ["10.246.13.142:2379"]
+}

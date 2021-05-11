@@ -14,11 +14,9 @@ func onServiceStop() {
 
 func main(){
 	msf.Init()
-
-	msf.RegistRpcHandler("rpc_test", func() msf.RpcHandler {return new(RpcTestHandler)})
-	msf.RegistRpcHandler("rpc_test1", func() msf.RpcHandler {return new(RpcTest1Handler)})
-
 	msf.SetBusiStop(onServiceStop)
+
+	msf.RegistRpcHandler("rpc_b", func() msf.RpcHandler {return new(RpcBHandler)})
 
 	msf.Start()
 }

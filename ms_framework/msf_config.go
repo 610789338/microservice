@@ -25,14 +25,12 @@ var GlobalCfg GlobalConfig
 func LoadConfig(filename string, v interface{}) {
     data, err := ioutil.ReadFile(filename)
     if err != nil {
-        ERROR_LOG("LoadConfig ReadFile error %v %v", filename, err)
-        return
+        panic(fmt.Sprintf("LoadConfig ReadFile error %v %v", filename, err))
     }
 
     err = json.Unmarshal(data, v)
     if err != nil {
-        ERROR_LOG("LoadConfig json.Unmarshal error %v", err)
-        return
+        panic(fmt.Sprintf("LoadConfig json.Unmarshal error %v", err))
     }
 
     DEBUG_LOG("global config %+v", GlobalCfg)

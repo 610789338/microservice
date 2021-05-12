@@ -29,9 +29,10 @@ type TcpServer struct {
 	port 			int
 	listener 		net.Listener
 	clients  		map[CONN_ID]*TcpClient
-	lb 				*LoadBalancer
 	stop 			bool
+	lb 				*LoadBalancer
 	mutex			sync.RWMutex
+
 }
 
 type TcpClient struct {
@@ -75,7 +76,7 @@ func (s *TcpServer) Start() {
 			break
 		}
 
-		if !s.lb.AddElement(string(connID), 0) {
+		if !s.lb.AddElement(string(connID)) {
 			s.mutex.Unlock()
 			return
 		}

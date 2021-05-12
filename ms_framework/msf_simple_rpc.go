@@ -188,7 +188,7 @@ func (rmgr *SimpleRpcMgr) RpcEncode(name string, args ...interface{}) []byte {
 		ERROR_LOG("encode rpc name error %v", err)
 	}
 
-	for _, arg := range(args) {
+	for _, arg := range args {
 		if err := encoder.Encode(arg); err != nil {
 			ERROR_LOG("args encode error %s: %v", name, err)
 			continue

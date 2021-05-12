@@ -5,54 +5,10 @@ import (
 	"net"
 	"time"
 	"io"
-	"math/rand"
 	"sync"
 )
 
 type REMOTE_ID string  // namespace:service
-
-type LoadBalancer struct {
-	elements	 	map[string]uint32  // target:weight
-}
-
-func (l *LoadBalancer) AddElement(ele string, weight uint32) bool {
-	_, ok := l.elements[ele]
-	if ok {
-		ERROR_LOG("[LoadBalancer] add element error %s already exist", ele)
-		return false
-	}
-
-	l.elements[ele] = weight
-
-	return true
-}
-
-func (l *LoadBalancer) DelElement(ele string) bool {
-	_, ok := l.elements[ele]
-	if !ok {
-		ERROR_LOG("[LoadBalancer] del element error %s not exist", ele)
-		return false
-	}
-
-	delete(l.elements, ele)
-
-	return true
-}
-
-func (l *LoadBalancer) LoadBalance() string {
-	// 简陋版的负载均衡
-	var ele string
-	idx := rand.Intn(len(l.elements))
-	for ele = range(l.elements) {
-		if idx <= 0 {
-			break
-		}
-
-		idx -= 1
-	}
-
-	return ele
-}
 
 /*
  * 用于gate服务发现
@@ -131,7 +87,7 @@ func (rmgr *RemoteMgr) ConnectRemote(namespace string, svrName string, ip string
 		rmgr.lbs[remoteID] = &LoadBalancer{elements: make(map[string]uint32)}
 	}
 
-	if !rmgr.lbs[remoteID].AddElement(string(connID), 0) {
+	if !rmgr.lbs[remoteID].AddElement(string(connID)) {
 		return nil
 	}
 

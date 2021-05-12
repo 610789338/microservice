@@ -220,10 +220,10 @@ func GetOutBoundIP() (ip string, err error)  {
     return
 }
 
-func RpcCall(serviceName string, rpcName string, rid uint32, args ...interface{}) bool {
+func RpcCall(serviceName string, rpcName string, rid uint32, args ...interface{}) (reply map[string]interface{}, error string) {
 	if serviceName == GlobalCfg.Service {
 		ERROR_LOG("[RpcCall] stupid call local method %s", rpcName)
-		return false
+		return
 	}
 
 	innerRpc := rpcMgr.RpcEncode(rpcName, args...)
@@ -235,41 +235,44 @@ func RpcCall(serviceName string, rpcName string, rid uint32, args ...interface{}
 	client, ok := tcpServer.clients[connID]
 	if !ok {
 		ERROR_LOG("[RpcCall] service to service rpc call load balance error %s", connID)
-		return false
+		return
+	}
+
+	ch := make(chan []interface{})
+	if rid != 0 {
+		// must before client.conn.Write
+		AddCallBack(rid, []interface{}{ch})
 	}
 
 	wLen, err := client.conn.Write(msg)
 	if err != nil {
 		ERROR_LOG("[RpcCall] write %v error %v", client.conn.RemoteAddr(), err)
-		return false
+		return
 	}
 
 	if wLen != len(msg) {
 		WARN_LOG("[RpcCall] write len(%v) != msg len(%v) @%v", wLen, len(msg), client.conn.RemoteAddr())
 	}
 
-	return true
+	if rid != 0 {
+		// block
+		rsp := <- ch
+
+		DEBUG_LOG("[RpcCallSync] %s:%s args %v rsp -> %v", serviceName, rpcName, args, rsp)
+
+		reply = rsp[1].(map[string]interface{})
+		error = rsp[0].(string)
+		return
+	}
+
+	DEBUG_LOG("[RpcCallAsync] %s:%s args %v", serviceName, rpcName, args)
+	return
 }
 
 func RpcCallSync(serviceName string, rpcName string, args ...interface{}) (map[string]interface{}, string) {
-	rid := GenGid()
-	if !RpcCall(serviceName, rpcName, rid, args...) {
-		return make(map[string]interface{}), ""
-	}
-
-	ch := make(chan []interface{})
-	AddCallBack(rid, []interface{}{ch})
-
-	// block
-	rsp := <- ch
-
-	DEBUG_LOG("[RpcCallSync] %s:%s args %v rsp -> %v", serviceName, rpcName, args, rsp)
-
-	return rsp[1].(map[string]interface{}), rsp[0].(string)
+	return RpcCall(serviceName, rpcName, GenGid(), args...)
 }
 
 func RpcCallAsync(serviceName string, rpcName string, args ...interface{}) {
 	RpcCall(serviceName, rpcName, 0, args...)
-
-	DEBUG_LOG("[RpcCallAsync] %s:%s args %v", serviceName, rpcName, args)
 }

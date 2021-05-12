@@ -22,6 +22,7 @@ func (r *RpcG2SRpcCallHandler) GetRspPtr() interface{} {return nil}
 
 func (r *RpcG2SRpcCallHandler) Process(session *Session) {
 
+	rpcFvc.Count()
 	error, reply := r.rpc_handler(session)
 
 	if r.req.GRid != 0 {

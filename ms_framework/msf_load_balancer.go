@@ -1,0 +1,252 @@
+package ms_framework
+
+import (
+	"math/rand"
+	"sort"
+	"sync"
+)
+
+
+const (
+	BalanceStrategy_Rand 		int8 = iota   // 随机
+	BalanceStrategy_RoundRobin 				  // 轮询调度
+	BalanceStrategy_AvgWeight 				  // 平均权重（自创） - 待优化
+)
+
+var BALANCE_STRATEGY int8 = BalanceStrategy_RoundRobin
+
+type LoadBalancer struct {
+	elements	 	map[string]uint32  // target:weight
+	rrbIdx 			uint16
+	mutex 			sync.RWMutex
+}
+
+func (l *LoadBalancer) AddElement(ele string) bool {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	_, ok := l.elements[ele]
+	if ok {
+		ERROR_LOG("[LoadBalancer] add element error %s already exist", ele)
+		return false
+	}
+
+	l.elements[ele] = 0
+
+	if BALANCE_STRATEGY == BalanceStrategy_AvgWeight && len(l.elements) != 0 {
+		var totalWeight uint32 = 0
+		for _, weight := range l.elements {
+			totalWeight += weight
+		}
+
+		l.elements[ele] = totalWeight/uint32(len(l.elements))
+	}
+
+	return true
+}
+
+func (l *LoadBalancer) DelElement(ele string) bool {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	_, ok := l.elements[ele]
+	if !ok {
+		ERROR_LOG("[LoadBalancer] del element error %s not exist", ele)
+		return false
+	}
+
+	delete(l.elements, ele)
+
+	return true
+}
+
+func (l *LoadBalancer) LoadBalance() (ele string) {
+
+	l.mutex.RLock()
+	switch BALANCE_STRATEGY {
+	case BalanceStrategy_Rand:
+		ele = l.LoadBalanceRand()
+
+	case BalanceStrategy_RoundRobin:
+		ele = l.LoadBalanceRoundRibin()
+
+	case BalanceStrategy_AvgWeight:
+		ele = l.LoadBalanceAvgWeight()
+
+	default:
+		ele = l.LoadBalanceAvgWeight()
+	}
+	l.mutex.RUnlock()
+
+	l.mutex.Lock()
+	l.elements[ele] += 1
+	l.mutex.Unlock()
+
+	return
+}
+
+func (l *LoadBalancer) LoadBalanceRand() (ele string) {
+
+	if len(l.elements) == 0 {
+		return
+	}
+
+	m := make([]string, 0, len(l.elements))
+
+	for ele, _ = range l.elements {
+		m = append(m, ele)
+	}
+
+	sort.Strings(m)
+
+	idx := rand.Intn(len(m))
+	ele = m[idx]
+
+	return
+}
+
+func (l *LoadBalancer) LoadBalanceRoundRibin() (ele string) {
+
+	if len(l.elements) == 0 {
+		return
+	}
+
+	m := make([]string, 0, len(l.elements))
+
+	for ele, _ = range l.elements {
+		m = append(m, ele)
+	}
+
+	sort.Strings(m)
+
+	if l.rrbIdx >= uint16(len(m)) {
+		l.rrbIdx = 0
+	}
+
+	ele = m[l.rrbIdx]
+	l.rrbIdx += 1
+
+	return
+}
+
+func (l *LoadBalancer) LoadBalanceAvgWeight() (ele string) {
+
+	if len(l.elements) == 0 {
+		return
+	}
+
+	var minWeight uint32 = 1 << 31
+
+	for el, weight := range l.elements {
+		if minWeight >= weight {
+			ele = el
+			minWeight = weight
+		}
+
+		// DEBUG_LOG("el %v weight %v minWeight %v", el, weight, minWeight)
+	}
+
+	return
+}
+
+// func init() {
+
+// 	lbRandTest()
+// 	lbRoundRobinTest()
+// 	lbAvgWeightTest()
+// }
+
+func lbRandTest() {
+	BALANCE_STRATEGY = BalanceStrategy_Rand
+	lb := LoadBalancer{elements: make(map[string]uint32)}
+	lb.AddElement("e1")
+	lb.AddElement("e2")
+	lb.AddElement("e3")
+	lb.AddElement("e4")
+	lb.AddElement("e5")
+
+	loop := 1000
+	for loop > 0 {
+		loop -= 1
+		lb.LoadBalance()
+	}
+
+	INFO_LOG("lbRandTest info 1: %v %+v", len(lb.elements), lb)
+
+	lb.DelElement("e4")
+	lb.DelElement("e5")
+	lb.AddElement("e6")
+
+	loop = 1000
+	for loop > 0 {
+		loop -= 1
+		lb.LoadBalance()
+	}
+
+	INFO_LOG("lbRandTest info 2: %v %+v", len(lb.elements), lb)
+}
+
+func lbRoundRobinTest() {
+	BALANCE_STRATEGY = BalanceStrategy_RoundRobin
+	lb := LoadBalancer{elements: make(map[string]uint32)}
+	lb.AddElement("e1")
+	lb.AddElement("e2")
+	lb.AddElement("e3")
+	lb.AddElement("e4")
+	lb.AddElement("e5")
+
+	loop := 1000
+	for loop > 0 {
+		loop -= 1
+		lb.LoadBalance()
+	}
+
+	INFO_LOG("lbRoundRobinTest info 1: %v %+v", len(lb.elements), lb)
+
+	lb.DelElement("e4")
+	lb.DelElement("e5")
+	lb.AddElement("e6")
+
+	loop = 1000
+	for loop > 0 {
+		loop -= 1
+		lb.LoadBalance()
+	}
+
+	INFO_LOG("lbRoundRobinTest info 2: %v %+v", len(lb.elements), lb)
+}
+
+func lbAvgWeightTest() {
+	BALANCE_STRATEGY = BalanceStrategy_AvgWeight
+
+	lb := LoadBalancer{elements: make(map[string]uint32)}
+	lb.AddElement("e1")
+	lb.AddElement("e2")
+	lb.AddElement("e3")
+	lb.AddElement("e4")
+	lb.AddElement("e5")
+
+	loop := 1000
+	for loop > 0 {
+		loop -= 1
+		lb.LoadBalance()
+	}
+
+	INFO_LOG("lbAvgWeightTest info 1: %v %+v", len(lb.elements), lb)
+
+	lb.DelElement("e4")
+	lb.DelElement("e5")
+	lb.AddElement("e6")
+
+	loop = 1000
+	for loop > 0 {
+		loop -= 1
+		lb.LoadBalance()
+	}
+
+	INFO_LOG("lbAvgWeightTest info 2: %v %+v", len(lb.elements), lb)
+
+	// lb.AddElement("e7")
+
+	// INFO_LOG("lbAvgWeightTest info 4: %v %+v", len(lb.elements), lb)
+}

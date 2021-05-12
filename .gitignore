@@ -1,5 +1,6 @@
 .*
 *.log
-ms_server
 ms_gate
-ms_client
+service_a
+service_b
+client

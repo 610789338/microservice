@@ -27,6 +27,8 @@ func (r *RpcC2GRpcRouteHandler) Process(session *Session) {
 	 * 往service发送MSG_G2S_RPC_CALL请求
 	 */
 
+	rpcFvc.Count()
+	
 	remoteID := GetRemoteID(r.req.NameSpace, r.req.Service)
 	remote := ChoiceRemote(remoteID)
 

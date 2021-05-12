@@ -39,6 +39,8 @@ func SetBusiStop(f func()) {
 	BusiStop = f
 }
 
+var rpcFvc *FlowVelocityCounter
+
 func Init() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
@@ -50,8 +52,11 @@ func Init() {
 	CreateTcpServer("", GlobalCfg.Port)
 	CreateEtcdDriver()
 
+	rpcFvc = &FlowVelocityCounter{counter: "RpcOps", output: true, ch: make(chan string)}
+
 	INFO_LOG("%s:%s init ok ...", GlobalCfg.Namespace, GlobalCfg.Service)
 }
+
 
 func Start() {
 	INFO_LOG("%s:%s start ...", GlobalCfg.Namespace, GlobalCfg.Service)
@@ -59,7 +64,9 @@ func Start() {
 	StartTcpServer()
 	StartEtcdDriver()
 
-	// go SignalHander(Stop, syscall.SIGINT, syscall.SIGTERM)
+	// go SignalHander(Stop, syscall.SIGINT, syscall.SIGTERM),
+
+	rpcFvc.Start()
 	
 	exitChan := make(chan os.Signal)
 	signal.Notify(exitChan, syscall.SIGINT, syscall.SIGTERM)

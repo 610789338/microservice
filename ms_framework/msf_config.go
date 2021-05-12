@@ -38,8 +38,6 @@ func LoadConfig(filename string, v interface{}) {
 
 func ParseArgs() {
 
-    DEBUG_LOG("args %v", os.Args)
-
     if len(os.Args) == 1 {
         return
     }

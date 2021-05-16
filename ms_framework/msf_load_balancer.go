@@ -8,16 +8,21 @@ import (
 
 
 const (
-	BalanceStrategy_Rand 		int8 = iota   // 随机
-	BalanceStrategy_RoundRobin 				  // 轮询调度
-	BalanceStrategy_AvgWeight 				  // 平均权重（自创） - 待优化
+	BalanceStrategy_Rand 		int8 = iota   	// 随机
+	BalanceStrategy_RoundRobin 				  	// 轮询调度
+	BalanceStrategy_TODO 				  		// 基于启动时序的负载均衡 - 新进成员承担更多负载
 )
 
 var BALANCE_STRATEGY int8 = BalanceStrategy_RoundRobin
 
+type BalanceInfo struct {
+	weight 			uint32
+}
+
 type LoadBalancer struct {
-	elements	 	map[string]uint32  // target:weight
-	rrbIdx 			uint16
+	elements	 	map[string]*BalanceInfo  	// target:weight
+	rrbIdx 			uint16 						// for round robin
+
 	mutex 			sync.RWMutex
 }
 
@@ -25,22 +30,17 @@ func (l *LoadBalancer) AddElement(ele string) bool {
 	l.mutex.Lock()
 	defer l.mutex.Unlock()
 
+	if nil == l.elements {
+		l.elements = make(map[string]*BalanceInfo)
+	}
+
 	_, ok := l.elements[ele]
 	if ok {
 		ERROR_LOG("[LoadBalancer] add element error %s already exist", ele)
 		return false
 	}
 
-	l.elements[ele] = 0
-
-	if BALANCE_STRATEGY == BalanceStrategy_AvgWeight && len(l.elements) != 0 {
-		var totalWeight uint32 = 0
-		for _, weight := range l.elements {
-			totalWeight += weight
-		}
-
-		l.elements[ele] = totalWeight/uint32(len(l.elements))
-	}
+	l.elements[ele] = &BalanceInfo{weight: 0}
 
 	return true
 }
@@ -70,16 +70,15 @@ func (l *LoadBalancer) LoadBalance() (ele string) {
 	case BalanceStrategy_RoundRobin:
 		ele = l.LoadBalanceRoundRibin()
 
-	case BalanceStrategy_AvgWeight:
-		ele = l.LoadBalanceAvgWeight()
-
 	default:
-		ele = l.LoadBalanceAvgWeight()
+		ele = l.LoadBalanceRoundRibin()
 	}
 	l.mutex.RUnlock()
 
 	l.mutex.Lock()
-	l.elements[ele] += 1
+	if element, ok := l.elements[ele]; ok {
+		element.weight += 1
+	}
 	l.mutex.Unlock()
 
 	return
@@ -129,36 +128,15 @@ func (l *LoadBalancer) LoadBalanceRoundRibin() (ele string) {
 	return
 }
 
-func (l *LoadBalancer) LoadBalanceAvgWeight() (ele string) {
-
-	if len(l.elements) == 0 {
-		return
-	}
-
-	var minWeight uint32 = 1 << 31
-
-	for el, weight := range l.elements {
-		if minWeight >= weight {
-			ele = el
-			minWeight = weight
-		}
-
-		// DEBUG_LOG("el %v weight %v minWeight %v", el, weight, minWeight)
-	}
-
-	return
-}
-
 // func init() {
 
 // 	lbRandTest()
 // 	lbRoundRobinTest()
-// 	lbAvgWeightTest()
 // }
 
 func lbRandTest() {
 	BALANCE_STRATEGY = BalanceStrategy_Rand
-	lb := LoadBalancer{elements: make(map[string]uint32)}
+	lb := LoadBalancer{}
 	lb.AddElement("e1")
 	lb.AddElement("e2")
 	lb.AddElement("e3")
@@ -188,7 +166,7 @@ func lbRandTest() {
 
 func lbRoundRobinTest() {
 	BALANCE_STRATEGY = BalanceStrategy_RoundRobin
-	lb := LoadBalancer{elements: make(map[string]uint32)}
+	lb := LoadBalancer{}
 	lb.AddElement("e1")
 	lb.AddElement("e2")
 	lb.AddElement("e3")
@@ -214,39 +192,4 @@ func lbRoundRobinTest() {
 	}
 
 	INFO_LOG("lbRoundRobinTest info 2: %v %+v", len(lb.elements), lb)
-}
-
-func lbAvgWeightTest() {
-	BALANCE_STRATEGY = BalanceStrategy_AvgWeight
-
-	lb := LoadBalancer{elements: make(map[string]uint32)}
-	lb.AddElement("e1")
-	lb.AddElement("e2")
-	lb.AddElement("e3")
-	lb.AddElement("e4")
-	lb.AddElement("e5")
-
-	loop := 1000
-	for loop > 0 {
-		loop -= 1
-		lb.LoadBalance()
-	}
-
-	INFO_LOG("lbAvgWeightTest info 1: %v %+v", len(lb.elements), lb)
-
-	lb.DelElement("e4")
-	lb.DelElement("e5")
-	lb.AddElement("e6")
-
-	loop = 1000
-	for loop > 0 {
-		loop -= 1
-		lb.LoadBalance()
-	}
-
-	INFO_LOG("lbAvgWeightTest info 2: %v %+v", len(lb.elements), lb)
-
-	// lb.AddElement("e7")
-
-	// INFO_LOG("lbAvgWeightTest info 4: %v %+v", len(lb.elements), lb)
 }

@@ -75,15 +75,7 @@ func (g *GateProxy) HandleRead() {
 func (g *GateProxy) RpcCall(rpcName string, args ...interface{}) {
 	rpc := msf.GetRpcMgr().RpcEncode(rpcName, args...)
 	msg := msf.GetRpcMgr().MessageEncode(rpc)
-
-	wLen, err := g.conn.Write(msg)
-	if err != nil {
-		msf.ERROR_LOG("write %v error %v", g.conn.RemoteAddr(), err)
-	}
-
-	if wLen != len(msg) {
-		msf.WARN_LOG("write len(%v) != msg len(%v) @%v", wLen, len(msg), g.conn.RemoteAddr())
-	}
+	msf.MessageSend(g.conn, msg)
 }
 
 func (g *GateProxy) Turn2Session() *msf.Session {

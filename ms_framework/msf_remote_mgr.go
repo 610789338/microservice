@@ -13,7 +13,7 @@ type REMOTE_ID string  // namespace:service
 /*
  * 用于gate服务发现
  * 依赖etcd建立本地路由缓存
- * 根据换成做路由负载均衡
+ * 根据缓存做路由负载均衡
  */
 type RemoteMgr struct {
 	remotes  		map[CONN_ID]*Remote
@@ -84,7 +84,7 @@ func (rmgr *RemoteMgr) ConnectRemote(namespace string, svrName string, ip string
 	remoteID := GetRemoteID(namespace, svrName)
 	_, ok = rmgr.lbs[remoteID]
 	if !ok {
-		rmgr.lbs[remoteID] = &LoadBalancer{elements: make(map[string]uint32)}
+		rmgr.lbs[remoteID] = &LoadBalancer{}
 	}
 
 	if !rmgr.lbs[remoteID].AddElement(string(connID)) {
@@ -97,8 +97,13 @@ func (rmgr *RemoteMgr) ConnectRemote(namespace string, svrName string, ip string
 		recvBuf: make([]byte, RECV_BUF_MAX_LEN),
 		remainLen: 0,
 	}
-
+	
 	go rmgr.remotes[connID].HandleRead()
+
+	// 上报身份
+	rpc := RpcEncode(MSG_G2S_IDENTITY_REPORT, GetServerIdentity())
+	msg := MessageEncode(rpc)
+	MessageSend(c, msg)
 
 	return nil
 }

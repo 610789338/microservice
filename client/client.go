@@ -12,17 +12,25 @@ var namespace = "YJ"
 
 var doMutex sync.Mutex
 
+var gate *clientsdk.GateProxy
+
+func init() {
+	clientsdk.Init()
+	gate = clientsdk.CreateGateProxy("127.0.0.1", 8886)
+	if nil == gate {
+		panic("gate is nil~~~")
+	}
+}
+
 func main() {
 	msf.INFO_LOG("clientsdk start %v", time.Now())
-	clientsdk.Init()
-	gate := clientsdk.CreateGateProxy("127.0.0.1", 8886)
 	TestService := gate.CreateServiceProxy(namespace, "ServiceA")
 	methodName := "rpc_a"
 	// methodName := "rpc_test1"
 
 	startTs := time.Now().UnixNano() / 1e6
 	time.Sleep(time.Millisecond)
-	var total, do, i int32 = 200000, 0, 0
+	var total, do, i int32 = 100, 0, 0
 	for ; i < total; i++ {
 		TestService.RpcCall(methodName, i, rand.Float32(), "abc", map[string]interface{}{"key1": rand.Int63(), "key2": "def"}, []int32{rand.Int31(), rand.Int31()}, 
 		// TestService.RpcCall(methodName, i, 

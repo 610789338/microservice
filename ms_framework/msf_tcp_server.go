@@ -32,8 +32,13 @@ type TcpServer struct {
 	stop 			bool
 	lb 				*LoadBalancer
 	mutex			sync.RWMutex
-
 }
+
+const (
+	CLIENT_IDENTITY_SERVICE_GATE = SERVER_IDENTITY_SERVICE_GATE
+	CLIENT_IDENTITY_CLIENT_GATE  = SERVER_IDENTITY_CLIENT_GATE
+	CLIENT_IDENTITY_MS_CLIENT	 = 1 << 7 - 1
+)
 
 type TcpClient struct {
 	id 				CONN_ID
@@ -42,6 +47,7 @@ type TcpClient struct {
 	remainLen 		uint32
 	exit 			bool
 	lastActiveTime  int64
+	identity		int8  // for service's client - client gate/service gate/ms client
 }
 
 func (s *TcpServer) Start() {
@@ -76,18 +82,14 @@ func (s *TcpServer) Start() {
 			break
 		}
 
-		if !s.lb.AddElement(string(connID)) {
-			s.mutex.Unlock()
-			return
-		}
-
 		s.clients[connID] = &TcpClient{
 			id: connID, 
 			conn: conn, 
-			recvBuf: make([]byte, RECV_BUF_MAX_LEN),
-			remainLen: 0,
-			exit: false,
-			lastActiveTime: GetNowTimestampMs(),
+			recvBuf: make([]byte, RECV_BUF_MAX_LEN), 
+			remainLen: 0, 
+			exit: false, 
+			lastActiveTime: GetNowTimestampMs(), 
+			identity: CLIENT_IDENTITY_MS_CLIENT,
 		}
 		s.mutex.Unlock()
 
@@ -128,12 +130,29 @@ func (s *TcpServer) Stop(){
 	INFO_LOG("tcp server(%s:%d) close...", s.ip, s.port)
 }
 
-func (s *TcpServer) onClientClose(c *TcpClient){
+func (s *TcpServer) onClientClose(c *TcpClient) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
 	delete(s.clients, GetClientID(c.conn))
-	s.lb.DelElement(string(GetConnID(c.conn)))
+	if CLIENT_IDENTITY_SERVICE_GATE == c.identity {
+		s.lb.DelElement(string(GetConnID(c.conn)))
+	}
+}
+
+func (s *TcpServer) onClientIdentityReport(conn net.Conn, identity int8) {
+	connID := GetConnID(conn)
+	client, ok := s.clients[connID]
+	if !ok {
+		ERROR_LOG("tcp client %s not exit~~~", connID)
+		return
+	}
+
+	client.identity = identity
+
+	if CLIENT_IDENTITY_SERVICE_GATE == identity {
+		s.lb.AddElement(string(connID))
+	}
 }
 
 func (c *TcpClient) HandleRead() {
@@ -227,16 +246,9 @@ func (c *TcpClient) Turn2Session() *Session {
 }
 
 func (c *TcpClient) HeartBeat(msg []byte) bool {
-	if len(msg) != 0 {
-		wLen, err := c.conn.Write(msg)
-		if err != nil {
-			ERROR_LOG("send heart beat write %v error %v", c.conn.RemoteAddr(), err)
-			return false
-		}
 
-		if wLen != len(msg) {
-			WARN_LOG("send heart beat write len(%v) != rsp msg len(%v) @%v", wLen, len(msg), c.conn.RemoteAddr())
-		}
+	if !MessageSend(c.conn, msg) {
+		return false
 	}
 
 	return true
@@ -250,7 +262,7 @@ func CreateTcpServer(_ip string, _port int) {
 		port: _port, 
 		clients: make(map[CONN_ID]*TcpClient), 
 		stop: false,
-		lb: &LoadBalancer{elements: make(map[string]uint32)},
+		lb: &LoadBalancer{},
 	}
 }
 
@@ -272,4 +284,28 @@ func GetClient(connID CONN_ID) *TcpClient {
 	}
 
 	return client
+}
+
+func MessageSend(conn net.Conn, msg []byte) bool {
+	if nil == conn {
+		ERROR_LOG("[message send] conn nil")
+		return false
+
+	}
+
+	if len(msg) == 0 {
+		return true
+	}
+
+	wLen, err := conn.Write(msg)
+	if err != nil {
+		ERROR_LOG("[message send] - write %v error %v", conn.RemoteAddr(), err)
+		return false
+	}
+
+	if wLen != len(msg) {
+		WARN_LOG("[message send] - write len(%v) != msg len(%v) @%v", wLen, len(msg), conn.RemoteAddr())
+	}
+
+	return true
 }

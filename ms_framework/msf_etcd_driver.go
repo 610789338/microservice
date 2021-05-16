@@ -141,9 +141,11 @@ var etcdDriver *EtcdDriver = nil
 
 func CreateEtcdDriver() {
 	var mode int8 = 0  // service regist
-	if "GateService" == GlobalCfg.Service {
+
+	if "ServiceGate" == GlobalCfg.Service || "ClientGate" == GlobalCfg.Service {
 		mode = 1  // service discover
 	}
+
 	etcdDriver = &EtcdDriver{mode: mode}
 }
 

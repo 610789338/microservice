@@ -7,25 +7,28 @@ import (
 	"syscall"
 )
 
+// 服务身份，分为微服务，微服务网关，客户端网关
+// 微服务网关负责微服务以及游戏服务器之间的消息路由
+// 客户端网关负责微服务和游戏客户端之间的消息路由
+// 默认身份是微服务，网关服务需单独设置身份
+const (
+	SERVER_IDENTITY_SERVICE 	int8 = iota
+	SERVER_IDENTITY_SERVICE_GATE
+	SERVER_IDENTITY_CLIENT_GATE
+)
 
-// var USE_SIMPLE_RPC bool = true
-// var USE_TCP bool = true
+var ServerIdentity int8 = SERVER_IDENTITY_SERVICE // default
 
-// type NetServer interface {
-// 	Start()
-// 	Close()
-// }
+func GetServerIdentity() int8 {
+	return ServerIdentity
+}
 
-// type RpcMgr interface {
-// 	RegistRpcHandler		(name string, gen RpcHanderGenerator)
-// 	MessageDecode			(buf []byte) (uint32, []byte)
-// 	MessageEncode			(b []byte) []byte
-// 	RpcDecode				(buf []byte) []byte
-// 	RpcEncode				(name string, args ...interface{}) []byte
-// 	GetRpcHanderGenerator	(rpcName string) (RpcHanderGenerator, bool)
-// }
+func SetServerIdentity(identity int8) {
+	ServerIdentity = identity
+}
 
-// 可重复注册signal handler
+
+// signal handler可重复注册
 func SignalHander(handler func(), sig ...os.Signal) {
 	sigChan := make(chan os.Signal)
 	signal.Notify(sigChan, sig...)
@@ -39,8 +42,6 @@ func SetBusiStop(f func()) {
 	BusiStop = f
 }
 
-var rpcFvc *FlowVelocityCounter
-
 func Init() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
@@ -52,8 +53,6 @@ func Init() {
 	CreateTcpServer("", GlobalCfg.Port)
 	CreateEtcdDriver()
 
-	rpcFvc = &FlowVelocityCounter{counter: "RpcOps", output: true, ch: make(chan string)}
-
 	INFO_LOG("%s:%s init ok ...", GlobalCfg.Namespace, GlobalCfg.Service)
 }
 
@@ -63,10 +62,9 @@ func Start() {
 
 	StartTcpServer()
 	StartEtcdDriver()
+	StartRpcFvc()
 
 	// go SignalHander(Stop, syscall.SIGINT, syscall.SIGTERM),
-
-	rpcFvc.Start()
 	
 	exitChan := make(chan os.Signal)
 	signal.Notify(exitChan, syscall.SIGINT, syscall.SIGTERM)
@@ -82,6 +80,7 @@ func Stop() {
 		BusiStop()
 	}
 
+	StopRpcFvc()
 	StopEtcdDriver()
 	StopTcpServer()
 }

@@ -6,12 +6,19 @@ package main
 
 import (
 	msf "ms_framework"
+	"fmt"
 )
 
 func main() {
 	msf.Init()
 
-	// msf.OnRemoteDiscover("YJ", "testService", "127.0.0.1", 6666)
-	// msf.OnRemoteDiscover("YJ", "testService", "127.0.0.1", 5555)
+	if "ServiceGate" == msf.GlobalCfg.Service {
+		msf.SetServerIdentity(msf.SERVER_IDENTITY_SERVICE_GATE)
+	} else if "ClientGate" == msf.GlobalCfg.Service {
+		msf.SetServerIdentity(msf.SERVER_IDENTITY_CLIENT_GATE)
+	} else {
+		panic(fmt.Sprint("error service cfg %s", msf.GlobalCfg.Service))
+	}
+
 	msf.Start()
 }

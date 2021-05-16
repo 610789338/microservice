@@ -17,6 +17,7 @@ func main(){
 	msf.SetBusiStop(onServiceStop)
 
 	msf.RegistRpcHandler("rpc_a", func() msf.RpcHandler {return new(RpcAHandler)})
+	msf.RegistRpcHandler("rpc_b", func() msf.RpcHandler {return new(RpcBHandler)})
 
 	msf.Start()
 }

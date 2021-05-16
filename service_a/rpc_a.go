@@ -32,5 +32,6 @@ func (r *RpcAHandler) Process(session *msf.Session) {
 	r.rsp.Req = r.req.I
 	// msf.DEBUG_LOG("RpcAHandler %+v", *r)
 
-	msf.RpcCallSync("ServiceB", "rpc_b", uint32(10))
+	// msf.RpcCallSync("ServiceB", "rpc_b", uint32(10))
+	msf.RpcCallSync("ServiceA", "rpc_b", uint32(10))
 }

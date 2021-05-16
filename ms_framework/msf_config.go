@@ -7,11 +7,6 @@ import (
     "fmt"
 )
 
-type EtcdConfig struct {
-    Host        string
-    Port        int
-}
-
 type GlobalConfig struct {
     Namespace   string
     Service     string

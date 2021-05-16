@@ -21,19 +21,6 @@ type Session struct {
 	conn		net.Conn
 }
 
-func (session *Session) SendResponse(msg []byte) {
-	if len(msg) != 0 {
-		wLen, err := session.conn.Write(msg)
-		if err != nil {
-			ERROR_LOG("write %v error %v", session.conn.RemoteAddr(), err)
-		}
-
-		if wLen != len(msg) {
-			WARN_LOG("write len(%v) != rsp msg len(%v) @%v", wLen, len(msg), session.conn.RemoteAddr())
-		}
-	}
-}
-
 func (session *Session) GetID() string {
 	return session.id
 }
@@ -46,16 +33,6 @@ func CreateSession(typ int8, id string, conn net.Conn) *Session {
 var MAX_PACKET_SIZE uint32 = 16*1024  // 16K
 var MESSAGE_SIZE_LEN uint32 = 4
 var RID_LEN uint32 = 4
-
-// client include mservice/gameserver/gameclient
-var MSG_C2G_RPC_ROUTE 			= "a"  // client to gate rpc route
-var MSG_G2S_RPC_CALL 			= "b"  // gate to service rpc call
-var MSG_S2G_RPC_RSP 			= "c"  // service to gate rpc response
-var MSG_G2C_RPC_RSP 			= "d"  // gate to client rpc response
-
-var MSG_HEART_BEAT_REQ 			= "e"  // heart beat request
-var MSG_HEART_BEAT_RSP 			= "f"  // heart beat response
-
 
 func ReadPacketLen(buf []byte) uint32 {
 	return ReadUint32(buf)
@@ -213,14 +190,16 @@ func CreateSimpleRpcMgr() {
 	rpcMgr = &SimpleRpcMgr{rpcs: make(map[string]RpcHanderGenerator)}
 
 	// default handler
-	rpcMgr.RegistRpcHandler(MSG_C2G_RPC_ROUTE, 		func() RpcHandler {return new(RpcC2GRpcRouteHandler)}) 	// for gate
-	rpcMgr.RegistRpcHandler(MSG_G2S_RPC_CALL, 		func() RpcHandler {return new(RpcG2SRpcCallHandler)})  	// for service
-	rpcMgr.RegistRpcHandler(MSG_S2G_RPC_RSP, 		func() RpcHandler {return new(RpcS2GRpcRspHandler)})   	// for gate
-	rpcMgr.RegistRpcHandler(MSG_G2C_RPC_RSP, 		func() RpcHandler {return new(RpcG2CRpcRspHandler)}) 	// for client
+	rpcMgr.RegistRpcHandler(MSG_C2G_RPC_ROUTE, 			func() RpcHandler {return new(RpcC2GRpcRouteHandler)}) 	// for gate
+	rpcMgr.RegistRpcHandler(MSG_G2S_RPC_CALL, 			func() RpcHandler {return new(RpcG2SRpcCallHandler)})  	// for service
+	rpcMgr.RegistRpcHandler(MSG_S2G_RPC_RSP, 			func() RpcHandler {return new(RpcS2GRpcRspHandler)})   	// for gate
+	rpcMgr.RegistRpcHandler(MSG_G2C_RPC_RSP, 			func() RpcHandler {return new(RpcG2CRpcRspHandler)}) 	// for client
 
 
-	rpcMgr.RegistRpcHandler(MSG_HEART_BEAT_REQ, 	func() RpcHandler {return new(RpcHeartBeatReqHandler)}) // for all
-	rpcMgr.RegistRpcHandler(MSG_HEART_BEAT_RSP,		func() RpcHandler {return new(RpcHeartBeatRspHandler)}) // for all
+	rpcMgr.RegistRpcHandler(MSG_HEART_BEAT_REQ, 		func() RpcHandler {return new(RpcHeartBeatReqHandler)}) // for all
+	rpcMgr.RegistRpcHandler(MSG_HEART_BEAT_RSP,			func() RpcHandler {return new(RpcHeartBeatRspHandler)}) // for all
+
+	rpcMgr.RegistRpcHandler(MSG_G2S_IDENTITY_REPORT,	func() RpcHandler {return new(RpcG2SIdentityReportHandler)}) // for service
 }
 
 func RegistRpcHandler(name string, gen RpcHanderGenerator) {
@@ -237,4 +216,51 @@ func MessageEncode(b []byte) []byte {
 
 func RpcEncode(name string, args ...interface{}) []byte {
 	return rpcMgr.RpcEncode(name, args...)
+}
+
+func RpcCall(serviceName string, rpcName string, rid uint32, args ...interface{}) (reply map[string]interface{}, error string) {
+
+	innerRpc := rpcMgr.RpcEncode(rpcName, args...)
+	rpc := rpcMgr.RpcEncode(MSG_C2G_RPC_ROUTE, GlobalCfg.Namespace, serviceName, rid, innerRpc)
+	msg := rpcMgr.MessageEncode(rpc)
+
+	var client *TcpClient = nil
+	connID := CONN_ID(tcpServer.lb.LoadBalance())
+	client, ok := tcpServer.clients[connID]
+	if !ok {
+		ERROR_LOG("[s2s rpc call] load balance error %s", connID)
+		return
+	}
+
+	ch := make(chan []interface{})
+	if rid != 0 {
+		// must before client.conn.Write
+		AddCallBack(rid, []interface{}{ch})
+	}
+
+	if !MessageSend(client.conn, msg) {
+		return
+	}
+
+	if rid != 0 {
+		// block
+		rsp := <- ch
+
+		DEBUG_LOG("[s2s rpc call sync] %s:%s args %v rsp -> %v", serviceName, rpcName, args, rsp)
+
+		reply = rsp[1].(map[string]interface{})
+		error = rsp[0].(string)
+		return
+	}
+
+	DEBUG_LOG("[s2s rpc call async] %s:%s args %v", serviceName, rpcName, args)
+	return
+}
+
+func RpcCallSync(serviceName string, rpcName string, args ...interface{}) (map[string]interface{}, string) {
+	return RpcCall(serviceName, rpcName, GenGid(), args...)
+}
+
+func RpcCallAsync(serviceName string, rpcName string, args ...interface{}) {
+	RpcCall(serviceName, rpcName, 0, args...)
 }

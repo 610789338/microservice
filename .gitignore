@@ -1,6 +1,7 @@
 .*
 *.log
-ms_gate
-service_a
-service_b
-client
+ms_gate/ms_gate
+service_a/service_a
+service_b/service_b
+client/client
+

@@ -15,6 +15,7 @@ type RpcAReq struct {
 }
 
 type RpcARsp struct {
+	msf.ErrRsp
 	Success 	bool
 	Req 		uint32
 }
@@ -30,8 +31,12 @@ func (r *RpcAHandler) GetRspPtr() interface{} {return &(r.rsp)}
 func (r *RpcAHandler) Process(session *msf.Session) {
 	r.rsp.Success = true
 	r.rsp.Req = r.req.I
-	// msf.DEBUG_LOG("RpcAHandler %+v", *r)
 
 	// msf.RpcCallSync("ServiceB", "rpc_b", uint32(10))
-	msf.RpcCallSync("ServiceA", "rpc_b", uint32(10))
+	err, _ := msf.RpcCallSync("ServiceA", "rpc_b", uint32(10))
+
+	if len(err) != 0 {
+		r.rsp.SetErr(err)
+		r.rsp.Success = false
+	}
 }

@@ -17,14 +17,20 @@ const (
 	SERVER_IDENTITY_CLIENT_GATE
 )
 
-var ServerIdentity int8 = SERVER_IDENTITY_SERVICE // default
+var serverIdentity int8 = SERVER_IDENTITY_SERVICE // default
+
+var IdentityMap = map[int8]string {
+	SERVER_IDENTITY_SERVICE: "SERVER_IDENTITY_SERVICE",
+	SERVER_IDENTITY_SERVICE_GATE: "SERVER_IDENTITY_SERVICE_GATE",
+	SERVER_IDENTITY_CLIENT_GATE: "SERVER_IDENTITY_CLIENT_GATE",
+}
 
 func GetServerIdentity() int8 {
-	return ServerIdentity
+	return serverIdentity
 }
 
 func SetServerIdentity(identity int8) {
-	ServerIdentity = identity
+	serverIdentity = identity
 }
 
 
@@ -46,11 +52,19 @@ func Init() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
 	ParseArgs()
+	
+    SetLogLevel(GlobalCfg.LogLevel)
+
+    if "ServiceGate" == GlobalCfg.Service {
+        SetServerIdentity(SERVER_IDENTITY_SERVICE_GATE)
+    } else if "ClientGate" == GlobalCfg.Service {
+        SetServerIdentity(SERVER_IDENTITY_CLIENT_GATE)
+    }
 
 	CreateSimpleRpcMgr()
 	CreateRemoteMgr()
 
-	CreateTcpServer("", GlobalCfg.Port)
+	CreateTcpServer(GetTcpListenIP(), GlobalCfg.Port)
 	CreateEtcdDriver()
 
 	INFO_LOG("%s:%s init ok ...", GlobalCfg.Namespace, GlobalCfg.Service)

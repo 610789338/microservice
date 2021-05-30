@@ -41,7 +41,11 @@ func LOG(ll int8, level string, format string, params ...interface{}) {
 
 	logBody := fmt.Sprintf(format, params...)
 
-	fmt.Printf("%v - [%s:%s] - [%s] %s\n", time.Now().Format("2006-01-02 15:04:05.000000"), GlobalCfg.Namespace, GlobalCfg.Service, level, logBody)
+	if ll == LOG_LEVEL_DEBUG || ll == LOG_LEVEL_ERROR {
+		fmt.Printf("%v - [%s] - [%s:%s] - %s\n", time.Now().Format("2006-01-02 15:04:05.000000"), level, GlobalCfg.Namespace, GlobalCfg.Service, logBody)
+	} else {
+		fmt.Printf("%v - [%s]  - [%s:%s] - %s\n", time.Now().Format("2006-01-02 15:04:05.000000"), level, GlobalCfg.Namespace, GlobalCfg.Service, logBody)
+	}
 }
 
 func DEBUG_LOG(format string, params ...interface{} ) {LOG(1, "DEBUG", format, params...)}

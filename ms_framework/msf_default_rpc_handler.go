@@ -85,7 +85,18 @@ func (r *RpcC2GRpcRouteHandler) Process(session *Session) {
 				rpcName: rpcName, 
 				createTime: GetNowTimestampMs(),
 			}
-			AddCallBack(grid, []interface{}{cbInfo})
+
+			// timeoutCb := func() {
+			// 	error := fmt.Sprintf("rpc call %s:%s:%s gate time out", r.req.NameSpace, r.req.Service, rpcName)
+			// 	INFO_LOG("[rpc route] - [%s:%s] rid[%v] response[%v]", r.req.NameSpace, r.req.Service, r.req.Rid, error)
+
+			// 	rpc := rpcMgr.RpcEncode(MSG_G2C_RPC_RSP, r.req.Rid, error, nil)
+			// 	msg := rpcMgr.MessageEncode(rpc)
+			// 	MessageSend(session.conn, msg)
+			// }
+
+			// 超时时间最好大于client cb的超时时间
+			AddCallBack(grid, []interface{}{cbInfo}, 101, nil)
 		}
 
 		rpc := RpcEncode(MSG_G2S_RPC_CALL, grid, r.req.InnerRpc)
@@ -133,7 +144,7 @@ func (r *RpcG2SRpcCallHandler) Process(session *Session) {
 	}
 
 	if error != "" {
-		ERROR_LOG("[method call] error - %s", error)
+		ERROR_LOG("[rpc call] - %s", error)
 	}
 }
 
@@ -149,9 +160,9 @@ func (r *RpcG2SRpcCallHandler) rpc_handler(session *Session) (string, map[string
 		return fmt.Sprintf("rpc %s not exist", rpcName), nil
 	}
 
-	rpc := f()
-	reqPtr := reflect.ValueOf(rpc.GetReqPtr())
-	if rpc.GetRspPtr() != nil && !reqPtr.IsNil() {
+	handler := f()
+	reqPtr := reflect.ValueOf(handler.GetReqPtr())
+	if handler.GetReqPtr() != nil && !reqPtr.IsNil() {
 		stValue := reqPtr.Elem()
 		for i := 0; i < stValue.NumField(); i++ {
 			nv := reflect.New(stValue.Field(i).Type())
@@ -163,11 +174,11 @@ func (r *RpcG2SRpcCallHandler) rpc_handler(session *Session) (string, map[string
 		}
 	}
 
-	rpc.Process(session)
+	handler.Process(session)
 
 	if r.req.GRid != 0 {
-		rspPtr := reflect.ValueOf(rpc.GetRspPtr())
-		if rpc.GetRspPtr() == nil || rspPtr.IsNil() {
+		rspPtr := reflect.ValueOf(handler.GetRspPtr())
+		if handler.GetRspPtr() == nil || rspPtr.IsNil() {
 			if r.req.GRid != 0 {
 				return fmt.Sprint("rpc %s need response but get nil", rpcName), nil
 			}
@@ -181,11 +192,12 @@ func (r *RpcG2SRpcCallHandler) rpc_handler(session *Session) (string, map[string
 			stMap[stValue.Type().Field(i).Name] = stValue.Field(i).Interface()
 		}
 
-		INFO_LOG("[method call] - [%s] args[%v] response[%v]", rpcName, rpc.GetReqPtr(), stMap)
-		return "", stMap
+		err := GetResponseErr(handler.GetRspPtr())
+		INFO_LOG("[rpc call] - [%s] args[%v] err[%v] reply[%v]", rpcName, handler.GetReqPtr(), err, stMap)
+		return err, stMap
 	}
 
-	INFO_LOG("[method call] - [%s] args[%v] response[nil]", rpcName, rpc.GetReqPtr())
+	INFO_LOG("[rpc call] - [%s] args[%v] reply[nil]", rpcName, handler.GetReqPtr())
 	return "", nil
 }
 
@@ -223,11 +235,11 @@ func (r *RpcS2GRpcRspHandler) Process(session *Session) {
 	}
 
 	if nil == conn {
-		ERROR_LOG("[rpc route] - connID %s not exist", connID)
+		ERROR_LOG("[rpc route] - response error: connID[%s] not exist", connID)
 		return
 	}
 
-	INFO_LOG("[rpc route] - [%s:%s:%s] rid[%v] response[err(%s) reply(%v)] timeCost - %vms", 
+	INFO_LOG("[rpc route] - [%s:%s:%s] rid[%v] err[%s] reply[%v] timeCost[%vms]", 
 		cbInfo.nameSpace, cbInfo.service, cbInfo.rpcName, rid, r.req.Error, r.req.Reply, GetNowTimestampMs() - cbInfo.createTime)
 
 	rpc := RpcEncode(MSG_G2C_RPC_RSP, rid, r.req.Error, r.req.Reply)
@@ -271,7 +283,7 @@ func (r *RpcHeartBeatReqHandler) GetReqPtr() interface{} {return nil}
 func (r *RpcHeartBeatReqHandler) GetRspPtr() interface{} {return nil}
 
 func (r *RpcHeartBeatReqHandler) Process(session *Session) {
-	DEBUG_LOG("heart beat request from %v", GetConnID(session.conn))
+	// DEBUG_LOG("heart beat request from %v", GetConnID(session.conn))
 
 	rpc := RpcEncode(MSG_HEART_BEAT_RSP)
 	msg := MessageEncode(rpc)
@@ -286,7 +298,7 @@ func (r *RpcHeartBeatRspHandler) GetReqPtr() interface{} {return nil}
 func (r *RpcHeartBeatRspHandler) GetRspPtr() interface{} {return nil}
 
 func (r *RpcHeartBeatRspHandler) Process(session *Session) {
-	DEBUG_LOG("heart beat response from %v", GetConnID(session.conn))
+	// DEBUG_LOG("heart beat response from %v", GetConnID(session.conn))
 }
 
 // ***************************  identity report ***************************
@@ -304,6 +316,11 @@ func (r *RpcG2SIdentityReportHandler) GetReqPtr() interface{} {return &(r.req)}
 func (r *RpcG2SIdentityReportHandler) GetRspPtr() interface{} {return nil}
 
 func (r *RpcG2SIdentityReportHandler) Process(session *Session) {
-	DEBUG_LOG("identity report %d from %v", r.req.Identity, GetConnID(session.conn))
-	tcpServer.onClientIdentityReport(session.conn, r.req.Identity)
+	identityStr, ok := IdentityMap[r.req.Identity]
+	if !ok {
+		ERROR_LOG("error identity report %d from %v", r.req.Identity, GetConnID(session.conn))
+	} else {
+		DEBUG_LOG("identity report %s from %v", identityStr, GetConnID(session.conn))
+		tcpServer.onClientIdentityReport(session.conn, r.req.Identity)
+	}
 }

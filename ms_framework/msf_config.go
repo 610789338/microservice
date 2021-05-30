@@ -47,6 +47,4 @@ func ParseArgs() {
             LoadConfig(os.Args[idx], &GlobalCfg)
         }
     }
-
-    SetLogLevel(GlobalCfg.LogLevel)
 }

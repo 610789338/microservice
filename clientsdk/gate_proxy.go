@@ -124,7 +124,13 @@ func (g *ServiceProxy) RpcCall(rpcName string, args ...interface{}) {
 		t := reflect.TypeOf(lastArg)
 		if t.Kind() == reflect.Func {
 			rid = GenGid()
-			msf.AddCallBack(rid, []interface{}{lastArg.(CallBack)})
+
+			timeoutCb := func() {
+				error := fmt.Sprintf("rpc call %s:%s:%s time out", g.Namespace, g.ServiceName, rpcName)
+				lastArg.(CallBack)(error, nil)
+			}
+
+			msf.AddCallBack(rid, []interface{}{lastArg.(CallBack)}, 100, timeoutCb)
 			args = args[:len(args)-1]
 		}
 	}

@@ -23,7 +23,7 @@ func (r *RpcG2CRpcRspHandler) Process(session *msf.Session) {
 
 	cbs := msf.GetCallBack(r.req.Rid)
 	if nil == cbs {
-		msf.ERROR_LOG("RpcG2CRpcRspHandler GetCallBack error %v", r.req.Rid)
+		msf.ERROR_LOG("RpcG2CRpcRspHandler GetCallBack error %v maybe timeout", r.req.Rid)
 		return
 	}
 

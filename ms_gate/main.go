@@ -12,11 +12,7 @@ import (
 func main() {
 	msf.Init()
 
-	if "ServiceGate" == msf.GlobalCfg.Service {
-		msf.SetServerIdentity(msf.SERVER_IDENTITY_SERVICE_GATE)
-	} else if "ClientGate" == msf.GlobalCfg.Service {
-		msf.SetServerIdentity(msf.SERVER_IDENTITY_CLIENT_GATE)
-	} else {
+	if msf.GlobalCfg.Service != "ServiceGate" && msf.GlobalCfg.Service != "ClientGate" {
 		panic(fmt.Sprint("error service cfg %s", msf.GlobalCfg.Service))
 	}
 

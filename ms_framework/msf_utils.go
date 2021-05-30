@@ -154,68 +154,81 @@ func GenGid() uint32 {
 }
 
 
-var localIplock sync.Mutex
-var localIp string
+var localIPLock sync.Mutex
+var outIPLock sync.Mutex
+var localIP string
+var outBoundIP string
 
 // func GetLocalIP() string {
 
-// 	if len(localIp) != 0 {
-// 		return localIp
+// 	if len(localIP) != 0 {
+// 		return localIP
 // 	}
 
-// 	localIplock.Lock()
-// 	defer localIplock.Unlock()
+// 	localIPLock.Lock()
+// 	defer localIPLock.Unlock()
 
 // 	addrs, err := net.InterfaceAddrs()
 // 	if err != nil {
 // 		panic(fmt.Sprintf("net.InterfaceAddrs err %v", err))
 // 	}
 
-// 	INFO_LOG("GetLocalIP addrs %v", addrs)
-
 // 	for _, address := range addrs {
 // 		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-// 			if ipnet.IP.To4() != nil {
-// 				localIp = ipnet.IP.String()
+// 			if ipnet.IP.To4() != nil && ipnet.IP.String() != GetOutBoundIP() {
+// 				localIP = ipnet.IP.String()
 // 			}
 // 		}
 // 	}
 
-// 	if len(localIp) == 0 {
-// 		panic(fmt.Sprintf("GetLocalIP err %v", addrs))
-// 	}
-
-// 	INFO_LOG("GetLocalIP %v", localIp)
-// 	return localIp
+// 	INFO_LOG("GetLocalIP %v", localIP)
+// 	return localIP
 // }
 
-func GetLocalIP() string {
+// func GetOutBoundIP() string  {
 
-	if len(localIp) != 0 {
-		return localIp
+// 	if len(outBoundIP) != 0 {
+// 		return outBoundIP
+// 	}
+
+// 	outIPLock.Lock()
+// 	defer outIPLock.Unlock()
+
+// 	conn, err := net.DialTimeout("tcp", "golang.org:http", time.Second)
+// 	if err != nil {
+// 		if e, ok := err.(*net.OpError); ok && e.Timeout() == true {
+// 			return ""
+// 		} else {
+// 			panic(fmt.Sprintf("GetOutBoundIP err %v", err))
+// 		}
+// 	}
+
+// 	outBoundIP = strings.Split(conn.LocalAddr().String(), ":")[0]
+// 	return outBoundIP
+// }
+
+func GetLocalIP() string  {
+
+	if len(localIP) != 0 {
+		return localIP
 	}
 
-	localIplock.Lock()
-	defer localIplock.Unlock()
+	localIPLock.Lock()
+	defer localIPLock.Unlock()
 
-	localIp, err := GetOutBoundIP()
+    conn, err := net.Dial("tcp", GlobalCfg.Etcd[0])
 	if err != nil {
-		panic(fmt.Sprintf("GetLocalIP err %v", err))
+		if e, ok := err.(*net.OpError); ok && e.Timeout() == true {
+			return ""
+		} else {
+			panic(fmt.Sprintf("GetLocalIP err %v", err))
+		}
 	}
 
-	INFO_LOG("GetLocalIP %v", localIp)
-	return localIp
+	localIP = strings.Split(conn.LocalAddr().String(), ":")[0]
+	return localIP
 }
 
-func GetOutBoundIP() (ip string, err error)  {
-    // conn, err := net.Dial("tcp", "golang.org:http")
-    conn, err := net.Dial("tcp", GlobalCfg.Etcd[0])
-    if err != nil {
-        return
-    }
-
-    localAddr := conn.LocalAddr()
-    ip = strings.Split(localAddr.String(), ":")[0]
-
-    return
+func DeclareHook(args ...interface{}) {
+	// for compile error: declared and not use 
 }

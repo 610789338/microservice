@@ -29,25 +29,32 @@ type Remote struct {
 }
 
 func (rmgr *RemoteMgr) OnRemoteDiscover(namespace string, svrName string, ip string, port uint32) {
-	INFO_LOG("OnRemoteDiscover %v %v", namespace, svrName)
-	
-	retryCnt := 5
-	for retryCnt > 0 {
-		err := rmgr.ConnectRemote(namespace, svrName, ip, port)
-		if err != nil {
-			ERROR_LOG("connect %s:%s @%s:%d fail %v retry(%d)...", namespace, svrName, ip, port, err, retryCnt)
-			time.Sleep(time.Second)
 
-			retryCnt -= 1
-			continue
+	connID := GenConnIDByIPPort(ip, port)
+	_, ok := rmgr.remotes[connID]
+	if ok {
+		WARN_LOG("remote %s:%s@%v already exist", namespace, svrName, connID)
+
+	} else {
+		INFO_LOG("OnRemoteDiscover %s:%s@%v", namespace, svrName, connID)
+
+		retryCnt := 5
+		for retryCnt > 0 {
+			err := rmgr.ConnectRemote(namespace, svrName, ip, port)
+			if err != nil {
+				ERROR_LOG("connect %s:%s @%s:%d fail %v retry(%d)...", namespace, svrName, ip, port, err, retryCnt)
+				time.Sleep(time.Second)
+
+				retryCnt -= 1
+				continue
+			}
+
+			break
 		}
-
-		break
 	}
 }
 
 func (rmgr *RemoteMgr) OnRemoteDisappear(remoteID REMOTE_ID, connID CONN_ID) {
-	INFO_LOG("OnRemoteDisappear %v %v", remoteID, connID)
 
 	rmgr.mutex.Lock()
 	defer rmgr.mutex.Unlock()

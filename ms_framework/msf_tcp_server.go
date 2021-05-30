@@ -144,7 +144,7 @@ func (s *TcpServer) onClientIdentityReport(conn net.Conn, identity int8) {
 	connID := GetConnID(conn)
 	client, ok := s.clients[connID]
 	if !ok {
-		ERROR_LOG("tcp client %s not exit~~~", connID)
+		ERROR_LOG("tcp client %s not exist~~~", connID)
 		return
 	}
 
@@ -264,6 +264,19 @@ func CreateTcpServer(_ip string, _port int) {
 		stop: false,
 		lb: &LoadBalancer{},
 	}
+}
+
+func GetTcpListenIP() (ip string) {
+	if SERVER_IDENTITY_CLIENT_GATE == GetServerIdentity() {
+		ip = "0.0.0.0"
+	} else {
+		ip = GetLocalIP()
+		if len(ip) == 0 {
+			ip = "0.0.0.0"
+		}
+	}
+
+	return
 }
 
 func StartTcpServer() {

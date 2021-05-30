@@ -26,17 +26,17 @@ func main() {
 	msf.INFO_LOG("clientsdk start %v", time.Now())
 	TestService := gate.CreateServiceProxy(namespace, "ServiceA")
 	methodName := "rpc_a"
-	// methodName := "rpc_test1"
+	// methodName := "rpc_b"
 
 	startTs := time.Now().UnixNano() / 1e6
 	time.Sleep(time.Millisecond)
-	var total, do, i int32 = 100, 0, 0
+	var total, do, i int32 = 10000, 0, 0
 	for ; i < total; i++ {
 		TestService.RpcCall(methodName, i, rand.Float32(), "abc", map[string]interface{}{"key1": rand.Int63(), "key2": "def"}, []int32{rand.Int31(), rand.Int31()}, 
 		// TestService.RpcCall(methodName, i, 
 		clientsdk.CallBack(func(err string, reply map[string]interface{}) {
 			if err != "" {
-				msf.ERROR_LOG("[%s] response: err(%v) reply(%v)", methodName, err, reply)
+				msf.ERROR_LOG("[rpc call] - %s response: err(%v) reply(%v)", methodName, err, reply)
 				return
 			}
 

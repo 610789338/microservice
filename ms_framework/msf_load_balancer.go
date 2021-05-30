@@ -62,29 +62,30 @@ func (l *LoadBalancer) DelElement(ele string) bool {
 
 func (l *LoadBalancer) LoadBalance() (ele string) {
 
-	l.mutex.RLock()
 	switch BALANCE_STRATEGY {
 	case BalanceStrategy_Rand:
 		ele = l.LoadBalanceRand()
 
 	case BalanceStrategy_RoundRobin:
-		ele = l.LoadBalanceRoundRibin()
+		ele = l.LoadBalanceRoundRobin()
 
 	default:
-		ele = l.LoadBalanceRoundRibin()
+		ele = l.LoadBalanceRoundRobin()
 	}
-	l.mutex.RUnlock()
 
 	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
 	if element, ok := l.elements[ele]; ok {
 		element.weight += 1
 	}
-	l.mutex.Unlock()
 
 	return
 }
 
 func (l *LoadBalancer) LoadBalanceRand() (ele string) {
+	l.mutex.RLock()
+	defer l.mutex.RUnlock()
 
 	if len(l.elements) == 0 {
 		return
@@ -104,9 +105,11 @@ func (l *LoadBalancer) LoadBalanceRand() (ele string) {
 	return
 }
 
-func (l *LoadBalancer) LoadBalanceRoundRibin() (ele string) {
+func (l *LoadBalancer) LoadBalanceRoundRobin() (ele string) {
+	l.mutex.RLock()
 
 	if len(l.elements) == 0 {
+		l.mutex.RUnlock()
 		return
 	}
 
@@ -117,6 +120,12 @@ func (l *LoadBalancer) LoadBalanceRoundRibin() (ele string) {
 	}
 
 	sort.Strings(m)
+
+	l.mutex.RUnlock()
+
+
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
 
 	if l.rrbIdx >= uint16(len(m)) {
 		l.rrbIdx = 0

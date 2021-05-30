@@ -58,6 +58,29 @@ type RpcHandler interface {
 
 type RpcHanderGenerator func() RpcHandler
 
+type WithErrRsp interface {
+	SetErr(err string)
+	GetErr() string
+}
+
+type ErrRsp struct {
+	err 	string
+}
+
+func (r *ErrRsp) SetErr(err string) {r.err = err}
+func (r *ErrRsp) GetErr() string {return r.err}
+
+func GetResponseErr(i interface{}) string {
+	v, ok := i.(WithErrRsp)	
+	// DEBUG_LOG("### GetResponseErr %T isok? %v - err: %v", i, ok, i)
+
+	if ok {
+		return v.GetErr()
+	} else {
+		return ""
+	}
+}
+
 type SimpleRpcMgr struct {
 	rpcs 	map[string]RpcHanderGenerator
 }
@@ -218,7 +241,11 @@ func RpcEncode(name string, args ...interface{}) []byte {
 	return rpcMgr.RpcEncode(name, args...)
 }
 
-func RpcCall(serviceName string, rpcName string, rid uint32, args ...interface{}) (reply map[string]interface{}, error string) {
+type RpcCallTimeOutError struct {
+	err 	string
+}
+
+func RpcCall(serviceName string, rpcName string, rid uint32, reSendCnt int8, args ...interface{}) (err string, reply map[string]interface{}) {
 
 	innerRpc := rpcMgr.RpcEncode(rpcName, args...)
 	rpc := rpcMgr.RpcEncode(MSG_C2G_RPC_ROUTE, GlobalCfg.Namespace, serviceName, rid, innerRpc)
@@ -233,34 +260,55 @@ func RpcCall(serviceName string, rpcName string, rid uint32, args ...interface{}
 	}
 
 	ch := make(chan []interface{})
+
 	if rid != 0 {
-		// must before client.conn.Write
-		AddCallBack(rid, []interface{}{ch})
+		// must before MessageSend
+		timeoutCb := func() {
+			timeout := RpcCallTimeOutError{err: fmt.Sprintf("s2s rpc call [%s:%s:%s] time out", GlobalCfg.Namespace, serviceName, rpcName)}
+			ch <- []interface{}{timeout, nil}
+		}
+		AddCallBack(rid, []interface{}{ch}, 33, timeoutCb)
 	}
 
 	if !MessageSend(client.conn, msg) {
 		return
 	}
+	// DeclareHook(msg, client)
 
 	if rid != 0 {
 		// block
 		rsp := <- ch
 
-		DEBUG_LOG("[s2s rpc call sync] %s:%s args %v rsp -> %v", serviceName, rpcName, args, rsp)
+		// 重发
+		error, isTimeout := rsp[0].(RpcCallTimeOutError)
+		if isTimeout && reSendCnt > 0 {
+			DEBUG_LOG("[s2s call sync] - [%s:%s] timeout... resend.%v", serviceName, rpcName, reSendCnt)
+			return RpcCall(serviceName, rpcName, GenGid(), reSendCnt - 1, args...)
+		}
 
-		reply = rsp[1].(map[string]interface{})
-		error = rsp[0].(string)
+		if isTimeout {
+			err = error.err
+		} else {
+			err = rsp[0].(string)
+		}
+
+		if rsp[1] != nil {
+			reply = rsp[1].(map[string]interface{})
+		}
+
+		DEBUG_LOG("[s2s call sync] - [%s:%s] args[%v] err[%v] reply[%v]", serviceName, rpcName, args, err, reply)
+
 		return
 	}
 
-	DEBUG_LOG("[s2s rpc call async] %s:%s args %v", serviceName, rpcName, args)
+	DEBUG_LOG("[s2s call async] - [%s:%s] args[%v]", serviceName, rpcName, args)
 	return
 }
 
-func RpcCallSync(serviceName string, rpcName string, args ...interface{}) (map[string]interface{}, string) {
-	return RpcCall(serviceName, rpcName, GenGid(), args...)
+func RpcCallSync(serviceName string, rpcName string, args ...interface{}) (string, map[string]interface{}) {
+	return RpcCall(serviceName, rpcName, GenGid(), 3, args...) // 默认超时重发3次
 }
 
 func RpcCallAsync(serviceName string, rpcName string, args ...interface{}) {
-	RpcCall(serviceName, rpcName, 0, args...)
+	RpcCall(serviceName, rpcName, 0, 0, args...)
 }

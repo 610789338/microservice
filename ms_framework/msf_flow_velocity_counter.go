@@ -7,22 +7,19 @@ import (
 
 
 type FlowVelocityCounter struct {
-	counter		string
+	Counter		string
+
 	lastTime 	int64
 	cnt 		int32
 	totalCnt  	int64
 	velocity    int32
 	frequency   time.Duration  // ms
 
-	output		bool
 	ch 			chan string
 }
 
 func (f *FlowVelocityCounter) Start() {
-	if nil == f.ch {
-		panic("ch nil")
-	}
-
+	f.ch = make(chan string)
 	if 0 == f.frequency {
 		f.frequency = 2000  // default 2s
 	}
@@ -56,8 +53,8 @@ func (f *FlowVelocityCounter) Start() {
 				if nowMs > f.lastTime {
 					f.velocity = int32(float64(f.cnt)/float64(nowMs - f.lastTime)*1000)
 
-					if f.velocity > 0 && f.output {
-						INFO_LOG("flow velocity counter - %s - velocity: %v/s  total: %v", f.counter, f.velocity, f.totalCnt)
+					if f.velocity > 0 {
+						WARN_LOG("flow velocity counter - %s - velocity: %v/s  total: %v", f.Counter, f.velocity, f.totalCnt)
 					}
 
 					f.lastTime = nowMs
@@ -78,10 +75,14 @@ func (f *FlowVelocityCounter) Count() {
 	f.ch <- "c"
 }
 
+func (f *FlowVelocityCounter) GetTotalCount() int64 {
+	return f.totalCnt
+}
+
 var rpcFvc *FlowVelocityCounter
 
 func StartRpcFvc() {
-	rpcFvc = &FlowVelocityCounter{counter: "rpc ops", output: true, ch: make(chan string)}
+	rpcFvc = &FlowVelocityCounter{Counter: "rpc ops"}
 	rpcFvc.Start()
 }
 
@@ -95,7 +96,7 @@ func StopRpcFvc() {
 
 // func init() {
 
-// 	fvc := &FlowVelocityCounter{counter: "fvc test", output: true, ch: make(chan string)}
+// 	fvc := &FlowVelocityCounter{Counter: "fvc test"}
 // 	fvc.Start()
 
 // 	go func() {

@@ -13,11 +13,6 @@ import (
 
 type CallBack func(err string, result map[string]interface{})
 
-func Init() {
-	msf.CreateSimpleRpcMgr()
-	msf.RegistRpcHandlerForce(msf.MSG_G2C_RPC_RSP, 	func() msf.RpcHandler {return new(RpcG2CRpcRspHandler)})
-}
-
 type GateProxy struct {
 	ip 				string
 	port 			int
@@ -80,6 +75,10 @@ func (g *GateProxy) RpcCall(rpcName string, args ...interface{}) {
 
 func (g *GateProxy) Turn2Session() *msf.Session {
 	return msf.CreateSession(msf.SessionTcpClient, fmt.Sprintf("%s:%d", g.ip, g.port), g.conn)
+}
+
+func (g *GateProxy) LocalAddr() string {
+	return g.conn.LocalAddr().String()
 }
 
 func CreateGateProxy(_ip string, _port int) *GateProxy {
@@ -153,4 +152,10 @@ func GenGid() uint32 {
 	gidMutex.Unlock()
 
 	return ret
+}
+
+func init() {
+	msf.CreateSimpleRpcMgr()
+	msf.RegistRpcHandlerForce(msf.MSG_G2C_RPC_RSP, 	func() msf.RpcHandler {return new(RpcG2CRpcRspHandler)})
+	msf.StartTaskPool()
 }

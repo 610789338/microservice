@@ -155,12 +155,12 @@ func (r *RpcG2SRpcCallHandler) rpc_handler(session *Session) (string, map[string
 	var rpcName string
 	decoder.Decode(&rpcName)
 
-	f, ok := rpcMgr.GetRpcHanderGenerator(rpcName)
+	handlerGen, ok := rpcMgr.GetRpcHanderGenerator(rpcName)
 	if !ok {
 		return fmt.Sprintf("rpc %s not exist", rpcName), nil
 	}
 
-	handler := f()
+	handler := handlerGen()
 	reqPtr := reflect.ValueOf(handler.GetReqPtr())
 	if handler.GetReqPtr() != nil && !reqPtr.IsNil() {
 		stValue := reqPtr.Elem()

@@ -173,7 +173,7 @@ func (c *TcpClient) HandleRead() {
 				if now - c.lastActiveTime > 10*1000 {
 
 					if now - c.lastActiveTime > 20*1000 {
-						ERROR_LOG("tcp connect heartbeat timeout %v", c.conn.RemoteAddr(), now, c.lastActiveTime)
+						ERROR_LOG("tcp connect heartbeat timeout %v now(%v), last(%v)", c.conn.RemoteAddr(), now, c.lastActiveTime)
 						break
 					}
 

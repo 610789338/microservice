@@ -2,82 +2,98 @@ package main
 
 import (
 	msf "ms_framework"
-	"time"
 	"clientsdk"
 	"math/rand"
-	"sync"
+	"time"
+	"os"
+	"strconv"
+	"fmt"
 )
 
 var namespace = "YJ"
 
-var doMutex sync.Mutex
+type Client struct {
+	gate 		*clientsdk.GateProxy
+	fvc			msf.FlowVelocityCounter
+	testCnt 	int
+}
 
-var gate *clientsdk.GateProxy
+func (c *Client) RpcCallTestA(cb clientsdk.CallBack) {
+	TestService := c.gate.CreateServiceProxy(namespace, "ServiceA")
+	TestService.RpcCall("rpc_a", rand.Int31(), rand.Float32(), "abc", 
+						map[string]interface{}{"key1": rand.Int63(), "key2": "def"}, []int32{rand.Int31(), rand.Int31()}, cb)
+}
 
-func init() {
-	clientsdk.Init()
-	gate = clientsdk.CreateGateProxy("127.0.0.1", 8886)
-	if nil == gate {
+func (c *Client) RpcCallTestB(cb clientsdk.CallBack) {
+	TestService := c.gate.CreateServiceProxy(namespace, "ServiceA")
+	TestService.RpcCall("rpc_b", rand.Int31(), cb)
+}
+
+func (c *Client) Start() {
+	c.gate = clientsdk.CreateGateProxy("10.246.13.142", 8886)
+	if nil == c.gate {
 		panic("gate is nil~~~")
 	}
+
+	msf.INFO_LOG("client start %v", c.gate.LocalAddr())
+	c.fvc = msf.FlowVelocityCounter{Counter: "client rtt"}
+	c.fvc.Start()
+
+	startTs := msf.GetNowTimestampMs()
+	for i := 0; i < c.testCnt; i++ {
+		c.RpcCallTestB(clientsdk.CallBack(func(err string, reply map[string]interface{}) {
+			if err != "" {
+				msf.ERROR_LOG("[rpc call] - response: err(%v) reply(%v)", err, reply)
+				return
+			}
+			c.fvc.Count()
+		}))
+	}
+
+	endTs := msf.GetNowTimestampMs()
+	msf.INFO_LOG("send avg ops %v/s", int64(c.testCnt)/(endTs - startTs)*1000)
+
+	for {
+		if c.fvc.GetTotalCount() == int64(c.testCnt) {
+			break
+		}
+		time.Sleep(time.Microsecond)
+	}
+	c.fvc.Stop()
+
+	endTs = msf.GetNowTimestampMs()
+	msf.INFO_LOG("rtt avg ops %v/s", int64(c.testCnt)/(endTs - startTs)*1000)
 }
 
 func main() {
-	msf.INFO_LOG("clientsdk start %v", time.Now())
-	TestService := gate.CreateServiceProxy(namespace, "ServiceA")
-	methodName := "rpc_a"
-	// methodName := "rpc_b"
+	var clientCnt, testCnt int = 0, 0
+	var err error
 
-	startTs := time.Now().UnixNano() / 1e6
-	time.Sleep(time.Millisecond)
-	var total, do, i int32 = 10000, 0, 0
-	for ; i < total; i++ {
-		TestService.RpcCall(methodName, i, rand.Float32(), "abc", map[string]interface{}{"key1": rand.Int63(), "key2": "def"}, []int32{rand.Int31(), rand.Int31()}, 
-		// TestService.RpcCall(methodName, i, 
-		clientsdk.CallBack(func(err string, reply map[string]interface{}) {
-			if err != "" {
-				msf.ERROR_LOG("[rpc call] - %s response: err(%v) reply(%v)", methodName, err, reply)
-				return
-			}
+    if len(os.Args) > 1 {
+	    for idx := 1; idx < len(os.Args); idx++ {
+	        switch os.Args[idx] {
+	        case "-c":
+	            idx++
+	            if clientCnt, err = strconv.Atoi(os.Args[idx]); err != nil {
+	            	panic(fmt.Sprintf("-c %v error, must be number", os.Args[idx]))
+	            }
 
-			// msf.INFO_LOG("[%s] response: err(%v) reply(%v)", methodName, err, reply)
-			// var req int32
-			// switch reply["Req"].(type){
-			// case int8:
-			// 	req = int32(reply["Req"].(int8))
-			// case uint8:
-			// 	req = int32(reply["Req"].(uint8))
-			// case int16:
-			// 	req = int32(reply["Req"].(int16))
-			// case uint16:
-			// 	req = int32(reply["Req"].(uint16))
-			// case int32:
-			// 	req = int32(reply["Req"].(int32))
-			// case uint32:
-			// 	req = int32(reply["Req"].(uint32))
-			// }
+	        case "-t":
+	            idx++
+	            if testCnt, err = strconv.Atoi(os.Args[idx]); err != nil {
+	            	panic(fmt.Sprintf("-t %v error, must be number", os.Args[idx]))
+	            }
+	        }
+	    }
+    }
 
-			doMutex.Lock()
-			do += 1
-			doMutex.Unlock()
-		}))
+    msf.INFO_LOG("client cnt %v, test cnt %v", clientCnt, testCnt)
 
-		// time.Sleep(time.Millisecond)
+	for i := 0; i < clientCnt ; i++ {
+		c := Client{testCnt: testCnt}
+		go c.Start()
 	}
 
-	endTs := time.Now().UnixNano() / 1e6
-	ops := int64(total*1000)/(endTs - startTs)
-	msf.DEBUG_LOG("send: startTs %v, endTs %v, ops = %v", startTs, endTs, ops)
-
-	for true {
-		if do >= total {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
-
-	endTs = time.Now().UnixNano() / 1e6
-
-	ops = int64(total*1000)/(endTs - startTs)
-	msf.DEBUG_LOG("rtt: startTs %v, endTs %v, ops = %v", startTs, endTs, ops)
+	ch := make(chan struct{})
+	<- ch
 }

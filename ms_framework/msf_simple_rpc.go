@@ -122,7 +122,10 @@ func (rmgr *SimpleRpcMgr) MessageDecode(session *Session, msg []byte) uint32 {
 		} else {
 			buf := make([]byte, pkgLen)
 			copy(buf, msg[offset: offset + pkgLen])
-			go rmgr.RpcDecode(session, buf)
+			go gTaskPool.ProduceTask(session, buf)
+
+			// go rmgr.RpcDecode(session, buf)
+			// rmgr.RpcDecode(session, buf)
 			// rmgr.RpcDecode(session, msg[offset: offset + pkgLen])
 		}
 
@@ -139,15 +142,15 @@ func (rmgr *SimpleRpcMgr) RpcDecode(session *Session, buf []byte) {
 	var rpcName string
 	decoder.Decode(&rpcName)
 
-	handlerGen, ok := rmgr.rpcs[rpcName]
+	handlerGen, ok := rmgr.GetRpcHanderGenerator(rpcName)
 	if !ok {
 		ERROR_LOG("rpc %s not exist", rpcName)
 		return
 	}
 
-	rpcHandler := handlerGen()
-	if rpcHandler.GetReqPtr() != nil {
-		reqPtr := reflect.ValueOf(rpcHandler.GetReqPtr())
+	handler := handlerGen()
+	if handler.GetReqPtr() != nil {
+		reqPtr := reflect.ValueOf(handler.GetReqPtr())
 		stValue := reqPtr.Elem()
 		for i := 0; i < stValue.NumField(); i++ {
 			nv := reflect.New(stValue.Field(i).Type())
@@ -160,12 +163,7 @@ func (rmgr *SimpleRpcMgr) RpcDecode(session *Session, buf []byte) {
 		}
 	}
 
-	rpcHandler.Process(session)
-
-	// rspPtr := reflect.ValueOf(rpcHandler.GetRspPtr())
-	// if rpcHandler.GetRspPtr() == nil || rspPtr.IsNil() {
-	// 	return
-	// }
+	handler.Process(session)
 }
 
 func (rmgr *SimpleRpcMgr) MessageEncode(buf []byte) []byte {

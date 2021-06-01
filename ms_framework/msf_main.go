@@ -42,10 +42,15 @@ func SignalHander(handler func(), sig ...os.Signal) {
 	handler()
 }
 
-var BusiStop func()
+var StartBusi func() = func() {}
+var StopBusi func() = func() {}
 
-func SetBusiStop(f func()) {
-	BusiStop = f
+func SetStartBusi(f func()) {
+	StartBusi = f
+}
+
+func SetStopBusi(f func()) {
+	StopBusi = f
 }
 
 func Init() {
@@ -70,13 +75,14 @@ func Init() {
 	INFO_LOG("%s:%s init ok ...", GlobalCfg.Namespace, GlobalCfg.Service)
 }
 
-
 func Start() {
 	INFO_LOG("%s:%s start ...", GlobalCfg.Namespace, GlobalCfg.Service)
 
+	StartTaskPool()
 	StartTcpServer()
 	StartEtcdDriver()
 	StartRpcFvc()
+	StartBusi()
 
 	// go SignalHander(Stop, syscall.SIGINT, syscall.SIGTERM),
 	
@@ -90,11 +96,9 @@ func Start() {
 }
 
 func Stop() {
-	if BusiStop != nil {
-		BusiStop()
-	}
-
+	StopBusi()
 	StopRpcFvc()
 	StopEtcdDriver()
 	StopTcpServer()
+	StopTaskPool()
 }

@@ -8,13 +8,18 @@ import (
 	msf "ms_framework"
 )
 
+func onServiceStart() {
+	msf.INFO_LOG("%s business start", msf.GlobalCfg.Service)
+}
+
 func onServiceStop() {
 	msf.INFO_LOG("%s business stop", msf.GlobalCfg.Service)
 }
 
 func main(){
 	msf.Init()
-	msf.SetBusiStop(onServiceStop)
+	msf.SetStartBusi(onServiceStart)
+	msf.SetStopBusi(onServiceStop)
 
 	msf.RegistRpcHandler("rpc_a", func() msf.RpcHandler {return new(RpcAHandler)})
 	msf.RegistRpcHandler("rpc_b", func() msf.RpcHandler {return new(RpcBHandler)})

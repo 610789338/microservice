@@ -167,7 +167,7 @@ func (r *RpcG2SRpcCallHandler) rpc_handler(session *Session) (string, map[string
 		for i := 0; i < stValue.NumField(); i++ {
 			nv := reflect.New(stValue.Field(i).Type())
 			if err := decoder.Decode(nv.Interface()); err != nil {
-				return fmt.Sprint("rpc %s arg %s(%v) decode error: %v", rpcName, stValue.Type().Field(i).Name, nv.Type(), err), nil
+				return fmt.Sprintf("rpc %s arg %s(%v) decode error: %v", rpcName, stValue.Type().Field(i).Name, nv.Type(), err), nil
 			}
 
 			stValue.Field(i).Set(nv.Elem())
@@ -180,7 +180,7 @@ func (r *RpcG2SRpcCallHandler) rpc_handler(session *Session) (string, map[string
 		rspPtr := reflect.ValueOf(handler.GetRspPtr())
 		if handler.GetRspPtr() == nil || rspPtr.IsNil() {
 			if r.req.GRid != 0 {
-				return fmt.Sprint("rpc %s need response but get nil", rpcName), nil
+				return fmt.Sprintf("rpc %s need response but get nil", rpcName), nil
 			}
 			return "", nil
 		}

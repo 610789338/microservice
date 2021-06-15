@@ -29,6 +29,11 @@ func (c *Client) RpcCallTestB(cb clientsdk.CallBack) {
 	TestService.RpcCall("rpc_b", rand.Int31(), cb)
 }
 
+func (c *Client) RpcCallDBTest(cb clientsdk.CallBack) {
+	TestService := c.gate.CreateServiceProxy(namespace, "ServiceA")
+	TestService.RpcCall("rpc_db_test", cb)
+}
+
 func (c *Client) Start() {
 	c.gate = clientsdk.CreateGateProxy("10.246.13.142", 8886)
 	if nil == c.gate {
@@ -41,7 +46,7 @@ func (c *Client) Start() {
 
 	startTs := msf.GetNowTimestampMs()
 	for i := 0; i < c.testCnt; i++ {
-		c.RpcCallTestB(clientsdk.CallBack(func(err string, reply map[string]interface{}) {
+		c.RpcCallDBTest(clientsdk.CallBack(func(err string, reply map[string]interface{}) {
 			if err != "" {
 				msf.ERROR_LOG("[rpc call] - response: err(%v) reply(%v)", err, reply)
 				return
@@ -51,7 +56,9 @@ func (c *Client) Start() {
 	}
 
 	endTs := msf.GetNowTimestampMs()
-	msf.INFO_LOG("send avg ops %v/s", int64(c.testCnt)/(endTs - startTs)*1000)
+	if endTs > startTs {
+		msf.INFO_LOG("send avg ops %v/s", int64(c.testCnt)/(endTs - startTs)*1000)
+	}
 
 	for {
 		if c.fvc.GetTotalCount() == int64(c.testCnt) {

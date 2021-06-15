@@ -13,7 +13,7 @@ func main() {
 	msf.Init()
 
 	if msf.GlobalCfg.Service != "ServiceGate" && msf.GlobalCfg.Service != "ClientGate" {
-		panic(fmt.Sprint("error service cfg %s", msf.GlobalCfg.Service))
+		panic(fmt.Sprintf("error service cfg %s", msf.GlobalCfg.Service))
 	}
 
 	msf.Start()

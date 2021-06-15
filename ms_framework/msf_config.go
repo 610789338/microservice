@@ -8,11 +8,14 @@ import (
 )
 
 type GlobalConfig struct {
-    Namespace   string
-    Service     string
-    Port        int
-    LogLevel    string
-    Etcd        []string
+    Namespace       string
+    Service         string
+    Port            int
+    LogLevel        string
+    Etcd            []string
+    Mongo           string
+    Redis           string
+    RedisCluster    []string
 }
 
 var GlobalCfg GlobalConfig

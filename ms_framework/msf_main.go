@@ -76,13 +76,15 @@ func Init() {
 }
 
 func Start() {
-	INFO_LOG("%s:%s start ...", GlobalCfg.Namespace, GlobalCfg.Service)
-
 	StartTaskPool()
 	StartTcpServer()
 	StartEtcdDriver()
+	StartMongoDriver()
+	StartRedisDriver()
 	StartRpcFvc()
 	StartBusi()
+
+	INFO_LOG("****************** %s:%s start ok ******************", GlobalCfg.Namespace, GlobalCfg.Service)
 
 	// go SignalHander(Stop, syscall.SIGINT, syscall.SIGTERM),
 	
@@ -98,6 +100,8 @@ func Start() {
 func Stop() {
 	StopBusi()
 	StopRpcFvc()
+	StopRedisDriver()
+	StopMongoDriver()
 	StopEtcdDriver()
 	StopTcpServer()
 	StopTaskPool()

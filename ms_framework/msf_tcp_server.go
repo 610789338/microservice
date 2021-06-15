@@ -55,46 +55,48 @@ func (s *TcpServer) Start() {
 	if err != nil {
 		panic(fmt.Sprintf("CreateTcpServer error %s:%d - %v", s.ip, s.port, err))
 	}
-	defer s.Stop()
 
 	s.listener = listener
 	INFO_LOG("tcp server listen at %v", s.listener.Addr())
 
-	for !s.stop {
-		conn, err := s.listener.Accept()
-		if err != nil {
+	go func() {
+		defer s.Stop()
+		for !s.stop {
+			conn, err := s.listener.Accept()
+			if err != nil {
+				if s.stop {
+					break
+				}
+
+				ERROR_LOG("tcp server accept error %v", err)
+				continue
+			}
+
+			INFO_LOG("tcp server(%s:%d) accept client %v", s.ip, s.port, conn.RemoteAddr())
+
+			connID := GetConnID(conn)
+
+			s.mutex.Lock()
+
 			if s.stop {
+				s.mutex.Unlock()
 				break
 			}
 
-			ERROR_LOG("tcp server accept error %v", err)
-			continue
-		}
-
-		INFO_LOG("tcp server(%s:%d) accept client %v", s.ip, s.port, conn.RemoteAddr())
-
-		connID := GetConnID(conn)
-
-		s.mutex.Lock()
-
-		if s.stop {
+			s.clients[connID] = &TcpClient{
+				id: connID, 
+				conn: conn, 
+				recvBuf: make([]byte, RECV_BUF_MAX_LEN), 
+				remainLen: 0, 
+				exit: false, 
+				lastActiveTime: GetNowTimestampMs(), 
+				identity: CLIENT_IDENTITY_MS_CLIENT,
+			}
 			s.mutex.Unlock()
-			break
-		}
 
-		s.clients[connID] = &TcpClient{
-			id: connID, 
-			conn: conn, 
-			recvBuf: make([]byte, RECV_BUF_MAX_LEN), 
-			remainLen: 0, 
-			exit: false, 
-			lastActiveTime: GetNowTimestampMs(), 
-			identity: CLIENT_IDENTITY_MS_CLIENT,
+			go s.clients[connID].HandleRead()
 		}
-		s.mutex.Unlock()
-
-		go s.clients[connID].HandleRead()
-	}
+	} ()
 }
 
 func (s *TcpServer) Stop(){
@@ -280,7 +282,7 @@ func GetTcpListenIP() (ip string) {
 }
 
 func StartTcpServer() {
-	go tcpServer.Start()
+	tcpServer.Start()
 }
 
 func StopTcpServer() {

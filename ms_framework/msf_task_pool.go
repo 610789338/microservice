@@ -14,19 +14,21 @@ type TaskPool struct {
 func (t *TaskPool) Start() {
 	go t.Monitor()
 
-	for {
-		op := <- t.opCh
-		switch op {
-		case "add":
-			t.size += 1
+	go func() {
+		for {
+			op := <- t.opCh
+			switch op {
+			case "add":
+				t.size += 1
 
-		case "del":
-			t.size -= 1
+			case "del":
+				t.size -= 1
 
-		case "get":
-			t.sizeCh <- t.size
+			case "get":
+				t.sizeCh <- t.size
+			}
 		}
-	}
+	} ()
 }
 
 // 每隔1s检测一下pool size，大于0打印出来
@@ -62,7 +64,7 @@ var gTaskPool *TaskPool = nil
 
 func StartTaskPool() {
 	gTaskPool = &TaskPool{opCh: make(chan string), sizeCh: make(chan int)}
-	go gTaskPool.Start()
+	gTaskPool.Start()
 }
 
 func StopTaskPool() {

@@ -21,8 +21,9 @@ func main(){
 	msf.SetStartBusi(onServiceStart)
 	msf.SetStopBusi(onServiceStop)
 
-	msf.RegistRpcHandler("rpc_a", func() msf.RpcHandler {return new(RpcAHandler)})
-	msf.RegistRpcHandler("rpc_b", func() msf.RpcHandler {return new(RpcBHandler)})
+	msf.RegistRpcHandler("rpc_a", 			func() msf.RpcHandler {return new(RpcAHandler)})
+	msf.RegistRpcHandler("rpc_b", 			func() msf.RpcHandler {return new(RpcBHandler)})
+	msf.RegistRpcHandler("rpc_db_test", 	func() msf.RpcHandler {return new(RpcDBTestHandler)})
 
 	msf.Start()
 }

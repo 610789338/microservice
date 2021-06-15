@@ -106,30 +106,32 @@ func (e *EtcdDriver) ServiceDiscover() {
 func (e *EtcdDriver) ServiceWatch() {
 	DEBUG_LOG("etcd server watch start...")
 
-	watchChan := e.cli.Watch(context.Background(), e.GenEtcdWatchKey(), etcdctl.WithPrefix())
+	go func() {
+		watchChan := e.cli.Watch(context.Background(), e.GenEtcdWatchKey(), etcdctl.WithPrefix())
 
-	for wrsp := range watchChan {
-		for _, ev := range wrsp.Events {
-			DEBUG_LOG("etcd events %s %s", ev.Type, ev.Kv.Key)
+		for wrsp := range watchChan {
+			for _, ev := range wrsp.Events {
+				DEBUG_LOG("etcd events %s %s", ev.Type, ev.Kv.Key)
 
-			remoteInfo := strings.Split(string(ev.Kv.Key), "/")
-			namespace := remoteInfo[2]
-			service := remoteInfo[3]
-			ip := strings.Split(remoteInfo[4], ":")[0]
-			port, _ := strconv.Atoi(strings.Split(remoteInfo[4], ":")[1])
+				remoteInfo := strings.Split(string(ev.Kv.Key), "/")
+				namespace := remoteInfo[2]
+				service := remoteInfo[3]
+				ip := strings.Split(remoteInfo[4], ":")[0]
+				port, _ := strconv.Atoi(strings.Split(remoteInfo[4], ":")[1])
 
-			switch ev.Type {
-			case etcdctl.EventTypePut:
-				OnRemoteDiscover(namespace, service, ip, uint32(port))
-			case etcdctl.EventTypeDelete:
-				OnRemoteDisappear(namespace, service, ip, uint32(port))
-			default:
-				ERROR_LOG("unknow etcd event %s %s", ev.Type, ev.Kv.Key)
+				switch ev.Type {
+				case etcdctl.EventTypePut:
+					OnRemoteDiscover(namespace, service, ip, uint32(port))
+				case etcdctl.EventTypeDelete:
+					OnRemoteDisappear(namespace, service, ip, uint32(port))
+				default:
+					ERROR_LOG("unknow etcd event %s %s", ev.Type, ev.Kv.Key)
+				}
 			}
 		}
-	}
 
-	DEBUG_LOG("etcd server watch end...")
+		DEBUG_LOG("etcd server watch end...")
+	} ()
 }
 
 func (e *EtcdDriver) GenEtcdServiceKey() string {
@@ -161,7 +163,7 @@ func CreateEtcdDriver() {
 }
 
 func StartEtcdDriver() {
-	go etcdDriver.Start()
+	etcdDriver.Start()
 }
 
 func StopEtcdDriver() {

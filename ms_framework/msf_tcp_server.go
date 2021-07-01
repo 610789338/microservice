@@ -12,16 +12,18 @@ type CONN_ID string
 
 var RECV_BUF_MAX_LEN uint32 = 10*1024*1024  // 10M
 
-func GetClientID(c net.Conn) CONN_ID {
-	return GetConnID(c)
-}
-
 func GetConnID(c net.Conn) CONN_ID {
 	return CONN_ID(c.RemoteAddr().String())  // ip:port
 }
 
 func GenConnIDByIPPort(ip string, port uint32) CONN_ID {
-	return CONN_ID(fmt.Sprintf("%s:%d", ip, port))
+	return CONN_ID(fmt.Sprintf("%s:%d", ip, port)) // ip:port
+}
+
+var onTcpAcceptBusi func(client *TcpClient) = func(client *TcpClient) {}
+
+func SetBusOnTcpAccept(f func(client *TcpClient)) {
+	onTcpAcceptBusi = f
 }
 
 type TcpServer struct {
@@ -41,13 +43,12 @@ const (
 )
 
 type TcpClient struct {
-	id 				CONN_ID
 	conn			net.Conn
 	recvBuf 		[]byte
 	remainLen 		uint32
 	exit 			bool
 	lastActiveTime  int64
-	identity		int8  // for service's client - client gate/service gate/ms client
+	identity		int8
 }
 
 func (s *TcpServer) Start() {
@@ -84,7 +85,6 @@ func (s *TcpServer) Start() {
 			}
 
 			s.clients[connID] = &TcpClient{
-				id: connID, 
 				conn: conn, 
 				recvBuf: make([]byte, RECV_BUF_MAX_LEN), 
 				remainLen: 0, 
@@ -95,6 +95,8 @@ func (s *TcpServer) Start() {
 			s.mutex.Unlock()
 
 			go s.clients[connID].HandleRead()
+
+			onTcpAcceptBusi(s.clients[connID])
 		}
 	} ()
 }
@@ -132,12 +134,17 @@ func (s *TcpServer) Stop(){
 	INFO_LOG("tcp server(%s:%d) close...", s.ip, s.port)
 }
 
+func (s *TcpServer) GetListerAddr() net.Addr {
+	return s.listener.Addr()
+}
+
 func (s *TcpServer) onClientClose(c *TcpClient) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	delete(s.clients, GetClientID(c.conn))
-	if CLIENT_IDENTITY_SERVICE_GATE == c.identity {
+	delete(s.clients, GetConnID(c.conn))
+	// 没必要区分client gate和server gate，client gate也能路由s2s rpc
+	if CLIENT_IDENTITY_SERVICE_GATE == c.identity || CLIENT_IDENTITY_CLIENT_GATE == c.identity {
 		s.lb.DelElement(string(GetConnID(c.conn)))
 	}
 }
@@ -152,7 +159,7 @@ func (s *TcpServer) onClientIdentityReport(conn net.Conn, identity int8) {
 
 	client.identity = identity
 
-	if CLIENT_IDENTITY_SERVICE_GATE == identity {
+	if CLIENT_IDENTITY_SERVICE_GATE == identity || CLIENT_IDENTITY_CLIENT_GATE == identity {
 		s.lb.AddElement(string(connID))
 	}
 }
@@ -239,12 +246,12 @@ func (c *TcpClient) RemoteAddr() net.Addr {
 	return c.conn.RemoteAddr()
 }
 
-func (c *TcpClient) GetClientID() CONN_ID {
-	return GetClientID(c.conn)
+func (c *TcpClient) Turn2Session() *Session {
+	return &Session{typ: SessionTcpClient, conn: c.conn}
 }
 
-func (c *TcpClient) Turn2Session() *Session {
-	return &Session{typ: SessionTcpClient, id: string(c.id), conn: c.conn}
+func (c *TcpClient) GetConn() net.Conn {
+	return c.conn
 }
 
 func (c *TcpClient) HeartBeat(msg []byte) bool {
@@ -287,6 +294,10 @@ func StartTcpServer() {
 
 func StopTcpServer() {
 	tcpServer.Stop()
+}
+
+func GetTcpServer() *TcpServer {
+	return tcpServer
 }
 
 func GetClient(connID CONN_ID) *TcpClient {

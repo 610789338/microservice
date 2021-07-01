@@ -17,16 +17,24 @@ const (
 
 type Session struct {
 	typ    		int8
-	id     		string
 	conn		net.Conn
+	err 		string
 }
 
-func (session *Session) GetID() string {
-	return session.id
+func (session *Session) GetConn() net.Conn {
+	return session.conn
 }
 
-func CreateSession(typ int8, id string, conn net.Conn) *Session {
-	return &Session{typ: typ, id: id, conn: conn}
+func CreateSession(typ int8, conn net.Conn) *Session {
+	return &Session{typ: typ, conn: conn}
+}
+
+func SetResponseErr(session *Session, err string) {
+	session.err = err
+}
+
+func GetResponseErr(session *Session) string {
+	return session.err
 }
 
 
@@ -57,29 +65,6 @@ type RpcHandler interface {
 }
 
 type RpcHanderGenerator func() RpcHandler
-
-type WithErrRsp interface {
-	SetErr(err string)
-	GetErr() string
-}
-
-type ErrRsp struct {
-	err 	string
-}
-
-func (r *ErrRsp) SetErr(err string) {r.err = err}
-func (r *ErrRsp) GetErr() string {return r.err}
-
-func GetResponseErr(i interface{}) string {
-	v, ok := i.(WithErrRsp)	
-	// DEBUG_LOG("### GetResponseErr %T isok? %v - err: %v", i, ok, i)
-
-	if ok {
-		return v.GetErr()
-	} else {
-		return ""
-	}
-}
 
 type SimpleRpcMgr struct {
 	rpcs 	map[string]RpcHanderGenerator
@@ -171,7 +156,6 @@ func (rmgr *SimpleRpcMgr) MessageEncode(buf []byte) []byte {
 	bufLen := uint32(len(buf))
 	msg := make([]byte, MESSAGE_SIZE_LEN + bufLen)
 	WritePacketLen(msg, bufLen)
-	// WriteRid(msg[MESSAGE_SIZE_LEN:], rid)
 	copy(msg[MESSAGE_SIZE_LEN:], buf)
 
 	return msg
@@ -211,16 +195,14 @@ func CreateSimpleRpcMgr() {
 	rpcMgr = &SimpleRpcMgr{rpcs: make(map[string]RpcHanderGenerator)}
 
 	// default handler
-	rpcMgr.RegistRpcHandler(MSG_C2G_RPC_ROUTE, 			func() RpcHandler {return new(RpcC2GRpcRouteHandler)}) 	// for gate
 	rpcMgr.RegistRpcHandler(MSG_G2S_RPC_CALL, 			func() RpcHandler {return new(RpcG2SRpcCallHandler)})  	// for service
-	rpcMgr.RegistRpcHandler(MSG_S2G_RPC_RSP, 			func() RpcHandler {return new(RpcS2GRpcRspHandler)})   	// for gate
 	rpcMgr.RegistRpcHandler(MSG_G2C_RPC_RSP, 			func() RpcHandler {return new(RpcG2CRpcRspHandler)}) 	// for client
 
 
 	rpcMgr.RegistRpcHandler(MSG_HEART_BEAT_REQ, 		func() RpcHandler {return new(RpcHeartBeatReqHandler)}) // for all
 	rpcMgr.RegistRpcHandler(MSG_HEART_BEAT_RSP,			func() RpcHandler {return new(RpcHeartBeatRspHandler)}) // for all
 
-	rpcMgr.RegistRpcHandler(MSG_G2S_IDENTITY_REPORT,	func() RpcHandler {return new(RpcG2SIdentityReportHandler)}) // for service
+	rpcMgr.RegistRpcHandler(MSG_G2S_IDENTITY_REPORT,	func() RpcHandler {return new(RpcG2SIdentityReportHandler)}) // for ms service
 }
 
 func RegistRpcHandler(name string, gen RpcHanderGenerator) {
@@ -309,4 +291,19 @@ func RpcCallSync(serviceName string, rpcName string, args ...interface{}) (strin
 
 func RpcCallAsync(serviceName string, rpcName string, args ...interface{}) {
 	RpcCall(serviceName, rpcName, 0, 0, args...)
+}
+
+// PushUnsafe("client1", "server", "push_test", int32(10), "hi bao")
+func PushUnsafe(clientID string, tpe string, rpcName string, args ...interface{}) {
+	rpc := rpcMgr.RpcEncode(rpcName, args...)
+	msg := rpcMgr.MessageEncode(rpc)
+	RpcCallAsync("PushService", MSG_PUSH_UNSAFE, clientID, tpe, msg)
+}
+
+func PushServerUnsafe(clientID string, rpcName string, args ...interface{}) {
+	PushUnsafe(clientID, "server", rpcName, args...)
+}
+
+func PushClientUnsafe(clientID string, rpcName string, args ...interface{}) {
+	PushUnsafe(clientID, "client", rpcName, args...)
 }

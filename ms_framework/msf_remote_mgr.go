@@ -169,7 +169,11 @@ func (r *Remote) RemoteAddr() net.Addr {
 }
 
 func (r *Remote) Turn2Session() *Session {
-	return &Session{typ: SessionRemote, id: string(GetConnID(r.conn)), conn: r.conn}
+	return &Session{typ: SessionRemote, conn: r.conn}
+}
+
+func (r *Remote) GetConn() net.Conn {
+	return r.conn
 }
 
 var remoteMgr *RemoteMgr = nil

@@ -67,6 +67,14 @@ func (g *GateProxy) HandleRead() {
 	}
 }
 
+func (g *GateProxy) Login(clientID string) {
+	g.RpcCall(msf.MSG_GATE_LOGIN, clientID)
+}
+
+func (g *GateProxy) Logoff(clientID string) {
+	g.RpcCall(msf.MSG_GATE_LOGOFF, clientID)
+}
+
 func (g *GateProxy) RpcCall(rpcName string, args ...interface{}) {
 	rpc := msf.GetRpcMgr().RpcEncode(rpcName, args...)
 	msg := msf.GetRpcMgr().MessageEncode(rpc)
@@ -74,7 +82,7 @@ func (g *GateProxy) RpcCall(rpcName string, args ...interface{}) {
 }
 
 func (g *GateProxy) Turn2Session() *msf.Session {
-	return msf.CreateSession(msf.SessionTcpClient, fmt.Sprintf("%s:%d", g.ip, g.port), g.conn)
+	return msf.CreateSession(msf.SessionTcpClient, g.conn)
 }
 
 func (g *GateProxy) LocalAddr() string {
@@ -152,6 +160,34 @@ func GenGid() uint32 {
 	gidMutex.Unlock()
 
 	return ret
+}
+
+// MSG_G2C_RPC_RSP
+type RpcG2CRpcRspReq struct {
+	Rid 	uint32
+	Error   string
+	Reply   map[string]interface{}
+}
+
+type RpcG2CRpcRspHandler struct {
+	req 	RpcG2CRpcRspReq
+}
+
+func (r *RpcG2CRpcRspHandler) GetReqPtr() interface{} {return &(r.req)}
+func (r *RpcG2CRpcRspHandler) GetRspPtr() interface{} {return nil}
+
+func (r *RpcG2CRpcRspHandler) Process(session *msf.Session) {
+
+	cbs := msf.GetCallBack(r.req.Rid)
+	if nil == cbs {
+		msf.ERROR_LOG("RpcG2CRpcRspHandler GetCallBack error %v maybe timeout", r.req.Rid)
+		return
+	}
+
+	cb := cbs[0].(CallBack)
+	if cb != nil {
+		cb(r.req.Error, r.req.Reply)
+	}
 }
 
 func init() {

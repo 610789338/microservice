@@ -5,23 +5,23 @@ package main
 
 
 import (
-	msf "ms_framework"
+    msf "ms_framework"
 )
 
 func onServiceStart() {
-	msf.INFO_LOG("%s business start", msf.GlobalCfg.Service)
+    msf.INFO_LOG("%s business start", msf.GlobalCfg.Service)
 }
 
 func onServiceStop() {
-	msf.INFO_LOG("%s business stop", msf.GlobalCfg.Service)
+    msf.INFO_LOG("%s business stop", msf.GlobalCfg.Service)
 }
 
 func main(){
-	msf.Init()
-	msf.SetStartBusi(onServiceStart)
-	msf.SetStopBusi(onServiceStop)
+    msf.Init()
+    msf.SetStartBusi(onServiceStart)
+    msf.SetStopBusi(onServiceStop)
 
-	msf.RegistRpcHandler("rpc_b", func() msf.RpcHandler {return new(RpcBHandler)})
+    msf.RegistRpcHandler("rpc_b", func() msf.RpcHandler {return new(RpcBHandler)})
 
-	msf.Start()
+    msf.Start()
 }

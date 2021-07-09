@@ -1,10 +1,10 @@
 package ms_framework
 
 import (
-	"runtime"
-	"os/signal"
-	"os"
-	"syscall"
+    "runtime"
+    "os/signal"
+    "os"
+    "syscall"
 )
 
 // 服务身份，分为微服务，微服务网关，客户端网关
@@ -12,52 +12,52 @@ import (
 // 客户端网关负责微服务和游戏客户端之间的消息路由
 // 默认身份是微服务，网关服务需单独设置身份
 const (
-	SERVER_IDENTITY_SERVICE 	int8 = iota
-	SERVER_IDENTITY_SERVICE_GATE
-	SERVER_IDENTITY_CLIENT_GATE
+    SERVER_IDENTITY_SERVICE         int8 = iota
+    SERVER_IDENTITY_SERVICE_GATE
+    SERVER_IDENTITY_CLIENT_GATE
 )
 
 var serverIdentity int8 = SERVER_IDENTITY_SERVICE // default
 
 var IdentityMap = map[int8]string {
-	SERVER_IDENTITY_SERVICE: "SERVER_IDENTITY_SERVICE",
-	SERVER_IDENTITY_SERVICE_GATE: "SERVER_IDENTITY_SERVICE_GATE",
-	SERVER_IDENTITY_CLIENT_GATE: "SERVER_IDENTITY_CLIENT_GATE",
+    SERVER_IDENTITY_SERVICE: "SERVER_IDENTITY_SERVICE",
+    SERVER_IDENTITY_SERVICE_GATE: "SERVER_IDENTITY_SERVICE_GATE",
+    SERVER_IDENTITY_CLIENT_GATE: "SERVER_IDENTITY_CLIENT_GATE",
 }
 
 func GetServerIdentity() int8 {
-	return serverIdentity
+    return serverIdentity
 }
 
 func SetServerIdentity(identity int8) {
-	serverIdentity = identity
+    serverIdentity = identity
 }
 
 
 // signal handler可重复注册
 func SignalHander(handler func(), sig ...os.Signal) {
-	sigChan := make(chan os.Signal)
-	signal.Notify(sigChan, sig...)
-	<-sigChan
-	handler()
+    sigChan := make(chan os.Signal)
+    signal.Notify(sigChan, sig...)
+    <-sigChan
+    handler()
 }
 
 var StartBusi func() = func() {}
 var StopBusi func() = func() {}
 
 func SetStartBusi(f func()) {
-	StartBusi = f
+    StartBusi = f
 }
 
 func SetStopBusi(f func()) {
-	StopBusi = f
+    StopBusi = f
 }
 
 func Init() {
-	runtime.GOMAXPROCS(runtime.NumCPU())
+    runtime.GOMAXPROCS(runtime.NumCPU())
 
-	ParseArgs()
-	
+    ParseArgs()
+    
     SetLogLevel(GlobalCfg.LogLevel)
 
     if "ServiceGate" == GlobalCfg.Service {
@@ -66,43 +66,43 @@ func Init() {
         SetServerIdentity(SERVER_IDENTITY_CLIENT_GATE)
     }
 
-	CreateSimpleRpcMgr()
-	CreateRemoteMgr()
+    CreateSimpleRpcMgr()
+    CreateRemoteMgr()
 
-	CreateTcpServer(GetTcpListenIP(), GlobalCfg.Port)
-	CreateEtcdDriver()
+    CreateTcpServer(GetTcpListenIP(), GlobalCfg.Port)
+    CreateEtcdDriver()
 
-	INFO_LOG("%s:%s init ok ...", GlobalCfg.Namespace, GlobalCfg.Service)
+    INFO_LOG("%s:%s init ok ...", GlobalCfg.Namespace, GlobalCfg.Service)
 }
 
 func Start() {
-	StartTaskPool()
-	StartTcpServer()
-	StartEtcdDriver()
-	StartMongoDriver()
-	StartRedisDriver()
-	StartRpcFvc()
-	StartBusi()
+    StartTaskPool()
+    StartTcpServer()
+    StartEtcdDriver()
+    StartMongoDriver()
+    StartRedisDriver()
+    StartRpcFvc()
+    StartBusi()
 
-	INFO_LOG("****************** %s:%s start ok ******************", GlobalCfg.Namespace, GlobalCfg.Service)
+    INFO_LOG("****************** %s:%s start ok ******************", GlobalCfg.Namespace, GlobalCfg.Service)
 
-	// go SignalHander(Stop, syscall.SIGINT, syscall.SIGTERM),
-	
-	exitChan := make(chan os.Signal)
-	signal.Notify(exitChan, syscall.SIGINT, syscall.SIGTERM)
-	<-exitChan
+    // go SignalHander(Stop, syscall.SIGINT, syscall.SIGTERM),
+    
+    exitChan := make(chan os.Signal)
+    signal.Notify(exitChan, syscall.SIGINT, syscall.SIGTERM)
+    <-exitChan
 
-	Stop()
+    Stop()
 
-	INFO_LOG("%s:%s shutdown ...", GlobalCfg.Namespace, GlobalCfg.Service)
+    INFO_LOG("%s:%s shutdown ...", GlobalCfg.Namespace, GlobalCfg.Service)
 }
 
 func Stop() {
-	StopBusi()
-	StopRpcFvc()
-	StopRedisDriver()
-	StopMongoDriver()
-	StopEtcdDriver()
-	StopTcpServer()
-	StopTaskPool()
+    StopBusi()
+    StopRpcFvc()
+    StopRedisDriver()
+    StopMongoDriver()
+    StopEtcdDriver()
+    StopTcpServer()
+    StopTaskPool()
 }

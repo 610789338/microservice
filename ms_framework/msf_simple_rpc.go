@@ -1,40 +1,40 @@
 package ms_framework
 
 import (
-	// "errors"
-	"reflect"
-	"github.com/vmihailenco/msgpack"
-	"bytes"
-	"fmt"
-	"net"
+    // "errors"
+    "reflect"
+    "github.com/vmihailenco/msgpack"
+    "bytes"
+    "fmt"
+    "net"
 )
 
 const (
-	SessionTcpClient int8 = iota
-	SessionRemote
-	SessionGateProxy
+    SessionTcpClient int8 = iota
+    SessionRemote
+    SessionGateProxy
 )
 
 type Session struct {
-	typ    		int8
-	conn		net.Conn
-	err 		string
+    typ         int8
+    conn        net.Conn
+    err         string
 }
 
 func (session *Session) GetConn() net.Conn {
-	return session.conn
+    return session.conn
 }
 
 func CreateSession(typ int8, conn net.Conn) *Session {
-	return &Session{typ: typ, conn: conn}
+    return &Session{typ: typ, conn: conn}
 }
 
 func SetResponseErr(session *Session, err string) {
-	session.err = err
+    session.err = err
 }
 
 func GetResponseErr(session *Session) string {
-	return session.err
+    return session.err
 }
 
 
@@ -43,267 +43,267 @@ var MESSAGE_SIZE_LEN uint32 = 4
 var RID_LEN uint32 = 4
 
 func ReadPacketLen(buf []byte) uint32 {
-	return ReadUint32(buf)
+    return ReadUint32(buf)
 }
 
 func WritePacketLen(buf []byte, v uint32) {
-	WriteUint32(buf, v)
+    WriteUint32(buf, v)
 }
 
 func ReadRid(buf []byte) uint32 {
-	return ReadUint32(buf)
+    return ReadUint32(buf)
 }
 
 func WriteRid(buf []byte, v uint32) {
-	WriteUint32(buf, v)
+    WriteUint32(buf, v)
 }
 
 type RpcHandler interface {
-	GetReqPtr() interface{}
-	GetRspPtr() interface{}
-	Process(session *Session)
+    GetReqPtr() interface{}
+    GetRspPtr() interface{}
+    Process(session *Session)
 }
 
 type RpcHanderGenerator func() RpcHandler
 
 type SimpleRpcMgr struct {
-	rpcs 	map[string]RpcHanderGenerator
+    rpcs     map[string]RpcHanderGenerator
 }
 
 func (rmgr *SimpleRpcMgr) RegistRpcHandler(name string, gen RpcHanderGenerator) {
-	_, ok := rmgr.rpcs[name]
-	if ok {
-		panic(fmt.Sprintf("RegistRpcHandler %s repeat !!!", name))
-	}
+    _, ok := rmgr.rpcs[name]
+    if ok {
+        panic(fmt.Sprintf("RegistRpcHandler %s repeat !!!", name))
+    }
 
-	rmgr.rpcs[name] = gen
+    rmgr.rpcs[name] = gen
 }
 
 func (rmgr *SimpleRpcMgr) RegistRpcHandlerForce(name string, gen RpcHanderGenerator) {
-	rmgr.rpcs[name] = gen
+    rmgr.rpcs[name] = gen
 }
 
 func (rmgr *SimpleRpcMgr) MessageDecode(session *Session, msg []byte) uint32 {
-	var offset uint32 = 0
+    var offset uint32 = 0
 
-	var bufLen uint32 = uint32(len(msg))
+    var bufLen uint32 = uint32(len(msg))
 
-	for offset < bufLen {
-		if bufLen - offset < MESSAGE_SIZE_LEN {
-			DEBUG_LOG("remain len(%d) < MESSAGE_SIZE_LEN(%d)", bufLen - offset, MESSAGE_SIZE_LEN)
-			break
-		}
+    for offset < bufLen {
+        if bufLen - offset < MESSAGE_SIZE_LEN {
+            DEBUG_LOG("remain len(%d) < MESSAGE_SIZE_LEN(%d)", bufLen - offset, MESSAGE_SIZE_LEN)
+            break
+        }
 
-		pkgLen := ReadPacketLen(msg[offset:])
-		if bufLen - offset < MESSAGE_SIZE_LEN + pkgLen {
-			DEBUG_LOG("remain len(%d) < MESSAGE_SIZE_LEN(%d) + pkgLen(%d)", bufLen - offset, MESSAGE_SIZE_LEN, pkgLen)
-			break
-		}
+        pkgLen := ReadPacketLen(msg[offset:])
+        if bufLen - offset < MESSAGE_SIZE_LEN + pkgLen {
+            DEBUG_LOG("remain len(%d) < MESSAGE_SIZE_LEN(%d) + pkgLen(%d)", bufLen - offset, MESSAGE_SIZE_LEN, pkgLen)
+            break
+        }
 
-		offset += MESSAGE_SIZE_LEN
+        offset += MESSAGE_SIZE_LEN
 
-		if pkgLen > MAX_PACKET_SIZE {
-			ERROR_LOG("packet size too long %d > %d", pkgLen, MAX_PACKET_SIZE)
-		} else {
-			buf := make([]byte, pkgLen)
-			copy(buf, msg[offset: offset + pkgLen])
-			go gTaskPool.ProduceTask(session, buf)
+        if pkgLen > MAX_PACKET_SIZE {
+            ERROR_LOG("packet size too long %d > %d", pkgLen, MAX_PACKET_SIZE)
+        } else {
+            buf := make([]byte, pkgLen)
+            copy(buf, msg[offset: offset + pkgLen])
+            go gTaskPool.ProduceTask(session, buf)
 
-			// go rmgr.RpcDecode(session, buf)
-			// rmgr.RpcDecode(session, buf)
-			// rmgr.RpcDecode(session, msg[offset: offset + pkgLen])
-		}
+            // go rmgr.RpcDecode(session, buf)
+            // rmgr.RpcDecode(session, buf)
+            // rmgr.RpcDecode(session, msg[offset: offset + pkgLen])
+        }
 
-		offset += pkgLen
-	}
+        offset += pkgLen
+    }
 
-	return offset
+    return offset
 }
 
 func (rmgr *SimpleRpcMgr) RpcDecode(session *Session, buf []byte) {
 
-	decoder := msgpack.NewDecoder(bytes.NewBuffer(buf))
+    decoder := msgpack.NewDecoder(bytes.NewBuffer(buf))
 
-	var rpcName string
-	decoder.Decode(&rpcName)
+    var rpcName string
+    decoder.Decode(&rpcName)
 
-	handlerGen, ok := rmgr.GetRpcHanderGenerator(rpcName)
-	if !ok {
-		ERROR_LOG("rpc %s not exist", rpcName)
-		return
-	}
+    handlerGen, ok := rmgr.GetRpcHanderGenerator(rpcName)
+    if !ok {
+        ERROR_LOG("rpc %s not exist", rpcName)
+        return
+    }
 
-	handler := handlerGen()
-	if handler.GetReqPtr() != nil {
-		reqPtr := reflect.ValueOf(handler.GetReqPtr())
-		stValue := reqPtr.Elem()
-		for i := 0; i < stValue.NumField(); i++ {
-			nv := reflect.New(stValue.Field(i).Type())
-			if err := decoder.Decode(nv.Interface()); err != nil {
-				ERROR_LOG("rpc(%s) arg(%s-%v) decode error: %v", rpcName, stValue.Type().Field(i).Name, nv.Type(), err)
-				return
-			}
+    handler := handlerGen()
+    if handler.GetReqPtr() != nil {
+        reqPtr := reflect.ValueOf(handler.GetReqPtr())
+        stValue := reqPtr.Elem()
+        for i := 0; i < stValue.NumField(); i++ {
+            nv := reflect.New(stValue.Field(i).Type())
+            if err := decoder.Decode(nv.Interface()); err != nil {
+                ERROR_LOG("rpc(%s) arg(%s-%v) decode error: %v", rpcName, stValue.Type().Field(i).Name, nv.Type(), err)
+                return
+            }
 
-			stValue.Field(i).Set(nv.Elem())
-		}
-	}
+            stValue.Field(i).Set(nv.Elem())
+        }
+    }
 
-	handler.Process(session)
+    handler.Process(session)
 }
 
 func (rmgr *SimpleRpcMgr) MessageEncode(buf []byte) []byte {
 
-	bufLen := uint32(len(buf))
-	msg := make([]byte, MESSAGE_SIZE_LEN + bufLen)
-	WritePacketLen(msg, bufLen)
-	copy(msg[MESSAGE_SIZE_LEN:], buf)
+    bufLen := uint32(len(buf))
+    msg := make([]byte, MESSAGE_SIZE_LEN + bufLen)
+    WritePacketLen(msg, bufLen)
+    copy(msg[MESSAGE_SIZE_LEN:], buf)
 
-	return msg
+    return msg
 }
 
 func (rmgr *SimpleRpcMgr) RpcEncode(name string, args ...interface{}) []byte {
 
-	writer := &bytes.Buffer{}
-	encoder := msgpack.NewEncoder(writer)
+    writer := &bytes.Buffer{}
+    encoder := msgpack.NewEncoder(writer)
 
-	if err := encoder.Encode(name); err != nil {
-		ERROR_LOG("encode rpc name error %v", err)
-	}
+    if err := encoder.Encode(name); err != nil {
+        ERROR_LOG("encode rpc name error %v", err)
+    }
 
-	for _, arg := range args {
-		if err := encoder.Encode(arg); err != nil {
-			ERROR_LOG("args encode error %s: %v", name, err)
-			continue
-		}
-	}
+    for _, arg := range args {
+        if err := encoder.Encode(arg); err != nil {
+            ERROR_LOG("args encode error %s: %v", name, err)
+            continue
+        }
+    }
 
-	return writer.Bytes()
+    return writer.Bytes()
 }
 
 func (rmgr *SimpleRpcMgr) GetRpcHanderGenerator(rpcName string) (RpcHanderGenerator, bool) {
-	f, ok := rmgr.rpcs[rpcName]
-	return f, ok
+    f, ok := rmgr.rpcs[rpcName]
+    return f, ok
 }
 
 var rpcMgr *SimpleRpcMgr = nil
 
 func GetRpcMgr() *SimpleRpcMgr {
-	return rpcMgr
+    return rpcMgr
 }
 
 func CreateSimpleRpcMgr() {
-	rpcMgr = &SimpleRpcMgr{rpcs: make(map[string]RpcHanderGenerator)}
+    rpcMgr = &SimpleRpcMgr{rpcs: make(map[string]RpcHanderGenerator)}
 
-	// default handler
-	rpcMgr.RegistRpcHandler(MSG_G2S_RPC_CALL, 			func() RpcHandler {return new(RpcG2SRpcCallHandler)})  	// for service
-	rpcMgr.RegistRpcHandler(MSG_G2C_RPC_RSP, 			func() RpcHandler {return new(RpcG2CRpcRspHandler)}) 	// for client
+    // default handler
+    rpcMgr.RegistRpcHandler(MSG_G2S_RPC_CALL,            func() RpcHandler {return new(RpcG2SRpcCallHandler)})      // for service
+    rpcMgr.RegistRpcHandler(MSG_G2C_RPC_RSP,             func() RpcHandler {return new(RpcG2CRpcRspHandler)})     // for client
 
 
-	rpcMgr.RegistRpcHandler(MSG_HEART_BEAT_REQ, 		func() RpcHandler {return new(RpcHeartBeatReqHandler)}) // for all
-	rpcMgr.RegistRpcHandler(MSG_HEART_BEAT_RSP,			func() RpcHandler {return new(RpcHeartBeatRspHandler)}) // for all
+    rpcMgr.RegistRpcHandler(MSG_HEART_BEAT_REQ,          func() RpcHandler {return new(RpcHeartBeatReqHandler)}) // for all
+    rpcMgr.RegistRpcHandler(MSG_HEART_BEAT_RSP,          func() RpcHandler {return new(RpcHeartBeatRspHandler)}) // for all
 
-	rpcMgr.RegistRpcHandler(MSG_G2S_IDENTITY_REPORT,	func() RpcHandler {return new(RpcG2SIdentityReportHandler)}) // for ms service
+    rpcMgr.RegistRpcHandler(MSG_G2S_IDENTITY_REPORT,     func() RpcHandler {return new(RpcG2SIdentityReportHandler)}) // for ms service
 }
 
 func RegistRpcHandler(name string, gen RpcHanderGenerator) {
-	rpcMgr.RegistRpcHandler(name, gen)
+    rpcMgr.RegistRpcHandler(name, gen)
 }
 
 func RegistRpcHandlerForce(name string, gen RpcHanderGenerator) {
-	rpcMgr.RegistRpcHandlerForce(name, gen)
+    rpcMgr.RegistRpcHandlerForce(name, gen)
 }
 
 func MessageEncode(b []byte) []byte {
-	return rpcMgr.MessageEncode(b)
+    return rpcMgr.MessageEncode(b)
 }
 
 func RpcEncode(name string, args ...interface{}) []byte {
-	return rpcMgr.RpcEncode(name, args...)
+    return rpcMgr.RpcEncode(name, args...)
 }
 
 type RpcCallTimeOutError struct {
-	err 	string
+    err     string
 }
 
 func RpcCall(serviceName string, rpcName string, rid uint32, reSendCnt int8, args ...interface{}) (err string, reply map[string]interface{}) {
 
-	innerRpc := rpcMgr.RpcEncode(rpcName, args...)
-	rpc := rpcMgr.RpcEncode(MSG_C2G_RPC_ROUTE, GlobalCfg.Namespace, serviceName, rid, innerRpc)
-	msg := rpcMgr.MessageEncode(rpc)
+    innerRpc := rpcMgr.RpcEncode(rpcName, args...)
+    rpc := rpcMgr.RpcEncode(MSG_C2G_RPC_ROUTE, GlobalCfg.Namespace, serviceName, rid, innerRpc)
+    msg := rpcMgr.MessageEncode(rpc)
 
-	var client *TcpClient = nil
-	connID := CONN_ID(tcpServer.lb.LoadBalance())
-	client, ok := tcpServer.clients[connID]
-	if !ok {
-		ERROR_LOG("[s2s rpc call] load balance error %s", connID)
-		return
-	}
+    var client *TcpClient = nil
+    connID := CONN_ID(tcpServer.lb.LoadBalance())
+    client, ok := tcpServer.clients[connID]
+    if !ok {
+        ERROR_LOG("[s2s rpc call] load balance error %s", connID)
+        return
+    }
 
-	ch := make(chan []interface{})
+    ch := make(chan []interface{})
 
-	if rid != 0 {
-		// must before MessageSend
-		timeoutCb := func() {
-			timeout := RpcCallTimeOutError{err: fmt.Sprintf("s2s rpc call [%s:%s:%s] time out", GlobalCfg.Namespace, serviceName, rpcName)}
-			ch <- []interface{}{timeout, nil}
-		}
-		AddCallBack(rid, []interface{}{ch}, 33, timeoutCb)
-	}
+    if rid != 0 {
+        // must before MessageSend
+        timeoutCb := func() {
+            timeout := RpcCallTimeOutError{err: fmt.Sprintf("s2s rpc call [%s:%s:%s] time out", GlobalCfg.Namespace, serviceName, rpcName)}
+            ch <- []interface{}{timeout, nil}
+        }
+        AddCallBack(rid, []interface{}{ch}, 33, timeoutCb)
+    }
 
-	if !MessageSend(client.conn, msg) {
-		return
-	}
-	// DeclareHook(msg, client)
+    if !MessageSend(client.conn, msg) {
+        return
+    }
+    // DeclareHook(msg, client)
 
-	if rid != 0 {
-		// block
-		rsp := <- ch
+    if rid != 0 {
+        // block
+        rsp := <- ch
 
-		// 重发
-		error, isTimeout := rsp[0].(RpcCallTimeOutError)
-		if isTimeout && reSendCnt > 0 {
-			DEBUG_LOG("[s2s call sync] - [%s:%s] timeout... resend.%v", serviceName, rpcName, reSendCnt)
-			return RpcCall(serviceName, rpcName, GenGid(), reSendCnt - 1, args...)
-		}
+        // 重发
+        error, isTimeout := rsp[0].(RpcCallTimeOutError)
+        if isTimeout && reSendCnt > 0 {
+            DEBUG_LOG("[s2s call sync] - [%s:%s] timeout... resend.%v", serviceName, rpcName, reSendCnt)
+            return RpcCall(serviceName, rpcName, GenGid(), reSendCnt - 1, args...)
+        }
 
-		if isTimeout {
-			err = error.err
-		} else {
-			err = rsp[0].(string)
-		}
+        if isTimeout {
+            err = error.err
+        } else {
+            err = rsp[0].(string)
+        }
 
-		if rsp[1] != nil {
-			reply = rsp[1].(map[string]interface{})
-		}
+        if rsp[1] != nil {
+            reply = rsp[1].(map[string]interface{})
+        }
 
-		DEBUG_LOG("[s2s call sync] - [%s:%s] args[%v] err[%v] reply[%v]", serviceName, rpcName, args, err, reply)
+        DEBUG_LOG("[s2s call sync] - [%s:%s] args[%v] err[%v] reply[%v]", serviceName, rpcName, args, err, reply)
 
-		return
-	}
+        return
+    }
 
-	DEBUG_LOG("[s2s call async] - [%s:%s] args[%v]", serviceName, rpcName, args)
-	return
+    DEBUG_LOG("[s2s call async] - [%s:%s] args[%v]", serviceName, rpcName, args)
+    return
 }
 
 func RpcCallSync(serviceName string, rpcName string, args ...interface{}) (string, map[string]interface{}) {
-	return RpcCall(serviceName, rpcName, GenGid(), 3, args...) // 默认超时重发3次
+    return RpcCall(serviceName, rpcName, GenGid(), 3, args...) // 默认超时重发3次
 }
 
 func RpcCallAsync(serviceName string, rpcName string, args ...interface{}) {
-	RpcCall(serviceName, rpcName, 0, 0, args...)
+    RpcCall(serviceName, rpcName, 0, 0, args...)
 }
 
 // PushUnsafe("client1", "server", "push_test", int32(10), "hi bao")
 func PushUnsafe(clientID string, tpe string, rpcName string, args ...interface{}) {
-	rpc := rpcMgr.RpcEncode(rpcName, args...)
-	msg := rpcMgr.MessageEncode(rpc)
-	RpcCallAsync("PushService", MSG_PUSH_UNSAFE, clientID, tpe, msg)
+    rpc := rpcMgr.RpcEncode(rpcName, args...)
+    msg := rpcMgr.MessageEncode(rpc)
+    RpcCallAsync("PushService", MSG_PUSH_UNSAFE, clientID, tpe, msg)
 }
 
 func PushServerUnsafe(clientID string, rpcName string, args ...interface{}) {
-	PushUnsafe(clientID, "server", rpcName, args...)
+    PushUnsafe(clientID, "server", rpcName, args...)
 }
 
 func PushClientUnsafe(clientID string, rpcName string, args ...interface{}) {
-	PushUnsafe(clientID, "client", rpcName, args...)
+    PushUnsafe(clientID, "client", rpcName, args...)
 }

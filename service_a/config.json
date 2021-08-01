@@ -4,9 +4,24 @@
   "port": 6666,
   "logLevel": "DEBUG",
   "etcd": ["10.246.13.142:2379"],
-  "mongo": "mongodb://10.246.13.143:27017",
-  "redis": "10.246.52.85:6379",
-  "redisCluster": ["10.246.52.85:7000"],
+  "dbCfg": 
+  [
+        {
+            "name": "myRedis1",
+            "type": "redisSingle",
+            "addr": ["10.246.52.85:6379"]
+        },
+        {
+            "name": "myRedis2",
+            "type": "redisCluster",
+            "addr": ["10.246.52.85:7000"]
+        },
+        {
+            "name": "myMongo",
+            "type": "mongo",
+            "addr": ["mongodb://10.246.13.143:27017"]
+        }
+  ],
   "busiCfg":{
     "test1": 12345,
     "test2": "12345"

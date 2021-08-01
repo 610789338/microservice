@@ -179,7 +179,7 @@ func (r *RpcGateLoginHandler) Process(session *msf.Session) {
 
     msf.INFO_LOG("[login] %s:%s", key, msf.GetConnID(session.GetConn()))
 
-    redisCluster := msf.GetRedisCluster()
+    redisCluster := msf.GetRedisCluster("myRedis2")
     value := fmt.Sprintf("%s/%s", msf.GetTcpServer().GetListerAddr().String(), msf.GetConnID(session.GetConn()))
     _, err := redisCluster.Set(key, value, 0).Result()
     if err != nil {
@@ -221,7 +221,7 @@ func (r *RpcGateLogoffHandler) Process(session *msf.Session) {
 
     msf.INFO_LOG("[logoff] %s:%s", key, msf.GetConnID(session.GetConn()))
 
-    redisCluster := msf.GetRedisCluster()
+    redisCluster := msf.GetRedisCluster("myRedis2")
     _, err := redisCluster.Del(key).Result()
     if err != nil {
         msf.ERROR_LOG("[logoff] redis error %v - %s:%s", err, key)

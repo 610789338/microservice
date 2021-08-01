@@ -53,7 +53,7 @@ func (r *RpcPushUnsafeHandler) Process(session *msf.Session) {
         return
     }
 
-    redisCluster := msf.GetRedisCluster()
+    redisCluster := msf.GetRedisCluster("myRedis2")
     target, err := redisCluster.Get(key).Result()
     if err != nil {
         msf.ERROR_LOG("redis get %s error %v", key, err)

@@ -31,7 +31,7 @@ func (r *RpcDBTestHandler) Process(session *msf.Session) {
 func (r *RpcDBTestHandler) RedisTest() {
 
     // redis
-    redis := msf.GetRedis()
+    redis := msf.GetRedisSingle("myRedis1")
     if nil == redis {
         msf.ERROR_LOG("redis nil")
         return
@@ -55,7 +55,7 @@ func (r *RpcDBTestHandler) RedisTest() {
 func (r *RpcDBTestHandler) RedisClusterTest() {
 
     // redis cluster
-    redisCluster := msf.GetRedisCluster()
+    redisCluster := msf.GetRedisCluster("myRedis2")
     if nil == redisCluster {
         msf.ERROR_LOG("redis cluster nil")
         return
@@ -79,7 +79,7 @@ func (r *RpcDBTestHandler) RedisClusterTest() {
 func (r *RpcDBTestHandler) MongoTest() {
     
     // mongo
-    mongo := msf.GetMongo()
+    mongo := msf.GetMongo("myMongo")
     if nil == mongo {
         msf.ERROR_LOG("mongo test nil")
         return

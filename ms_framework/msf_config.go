@@ -7,15 +7,19 @@ import (
     "fmt"
 )
 
+type DbConfig struct {
+    Name            string
+    Type            string
+    Addr            []string
+}
+
 type GlobalConfig struct {
     Namespace       string
     Service         string
     Port            int
     LogLevel        string
     Etcd            []string
-    Mongo           string
-    Redis           string
-    RedisCluster    []string
+    DbCfg           []DbConfig
 }
 
 var GlobalCfg GlobalConfig

@@ -79,8 +79,7 @@ func Start() {
     StartTaskPool()
     StartTcpServer()
     StartEtcdDriver()
-    StartMongoDriver()
-    StartRedisDriver()
+    CreateDBResource()
     StartRpcFvc()
     StartBusi()
 
@@ -100,8 +99,7 @@ func Start() {
 func Stop() {
     StopBusi()
     StopRpcFvc()
-    StopRedisDriver()
-    StopMongoDriver()
+    ReleaseDBResource()
     StopEtcdDriver()
     StopTcpServer()
     StopTaskPool()

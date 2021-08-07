@@ -43,7 +43,7 @@ gate作为tcp client和每个service建立连接，通过remote_mgr来管理到t
 利用golang协程对每个callback做超时监控，若请求长时间未应答则触发超时应答，避免请求方阻塞
 
 * msf_load_balancer.go
-负载均衡管理器，提供多种负载均衡策略（暂时只有随机和轮询），目前用于gate->service的负载均衡
+负载均衡管理器，提供多种负载均衡策略（暂时只有随机和轮询），目前用于c2s和s2s（见流程拆解）的负载均衡
 
 * msf_flow_velocity_counter.go
 流速统计器，目前用于统计client的请求速度以及gate和service的rpc处理速度
@@ -124,6 +124,15 @@ service支持主动推送消息给client，由于gate有多份实例，所以需
 注：
 这里的client特指游戏中的对象，所以存在多个client共用一条tcp连接的情况，比如两个玩家在同一个游戏服务器进程上，游戏服务器进程作为client和gate就只有一条tcp连接
 目前推送微服务（push service）负责上诉流程，其他service通过s2s调用push service接口来实现推送功能
+
+# 服务发现
+集群采用etcd做服务发现
+* service启动时向etcd注册带租约的key，所有service的key前缀统一，后缀为service的ip:port信息
+* gate启动时向etcd获取前缀下的所有key，解析出ip:port逐一建立连接，并watch该前缀做到实时感知service上下线
+
+压测时发现当service负荷较大时会导致其在etcd的key租约过期，从而导致gate接收到service下线通知，此时service虽然运行正常却无法提供服务
+为避免这种情况，在service启动后增加租约监控，定时检测，若发现租约过期则进行重新注册
+在gate侧也定时拉取所有服务列表和本地service连接做对比，判断是否有漏连的service
 
 # clientsdk
 TODO

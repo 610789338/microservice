@@ -16,8 +16,6 @@ var MSG_G2C_RPC_RSP             = "d"  // gate to client rpc response
 var MSG_HEART_BEAT_REQ          = "e"  // heart beat request
 var MSG_HEART_BEAT_RSP          = "f"  // heart beat response
 
-var MSG_G2S_IDENTITY_REPORT     = "g"  // gate to service identity report (cluster gate or client gate ?)
-
 var MSG_GATE_LOGIN              = "h"  // client login from gate
 var MSG_GATE_LOGOFF             = "i"  // client logoff from gate
 
@@ -168,28 +166,4 @@ func (r *RpcHeartBeatRspHandler) GetRspPtr() interface{} {return nil}
 
 func (r *RpcHeartBeatRspHandler) Process(session *Session) {
     // DEBUG_LOG("heart beat response from %v", GetConnID(session.conn))
-}
-
-// ***************************  identity report ***************************
-
-// MSG_G2S_IDENTITY_REPORT
-type RpcG2SIdentityReportReq struct {
-    Identity     int8
-}
-
-type RpcG2SIdentityReportHandler struct {
-    req          RpcG2SIdentityReportReq
-}
-
-func (r *RpcG2SIdentityReportHandler) GetReqPtr() interface{} {return &(r.req)}
-func (r *RpcG2SIdentityReportHandler) GetRspPtr() interface{} {return nil}
-
-func (r *RpcG2SIdentityReportHandler) Process(session *Session) {
-    identityStr, ok := IdentityMap[r.req.Identity]
-    if !ok {
-        ERROR_LOG("error identity report %d from %v", r.req.Identity, GetConnID(session.conn))
-    } else {
-        DEBUG_LOG("identity report %s from %v", identityStr, GetConnID(session.conn))
-        tcpServer.onClientIdentityReport(session.conn, r.req.Identity)
-    }
 }

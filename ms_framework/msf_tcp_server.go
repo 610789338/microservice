@@ -36,19 +36,12 @@ type TcpServer struct {
     mutex            sync.RWMutex
 }
 
-const (
-    CLIENT_IDENTITY_SERVICE_GATE = SERVER_IDENTITY_SERVICE_GATE
-    CLIENT_IDENTITY_CLIENT_GATE  = SERVER_IDENTITY_CLIENT_GATE
-    CLIENT_IDENTITY_MS_CLIENT     = 1 << 7 - 1
-)
-
 type TcpClient struct {
     conn            net.Conn
     recvBuf         []byte
     remainLen       uint32
     exit            bool
     lastActiveTime  int64
-    identity        int8
 }
 
 func (s *TcpServer) Start() {
@@ -89,10 +82,11 @@ func (s *TcpServer) Start() {
                 recvBuf: make([]byte, RECV_BUF_MAX_LEN), 
                 remainLen: 0, 
                 exit: false, 
-                lastActiveTime: GetNowTimestampMs(), 
-                identity: CLIENT_IDENTITY_MS_CLIENT,
+                lastActiveTime: GetNowTimestampMs(),
             }
             s.mutex.Unlock()
+
+            s.lb.AddElement(string(connID))
 
             go s.clients[connID].HandleRead()
 
@@ -143,25 +137,7 @@ func (s *TcpServer) onClientClose(c *TcpClient) {
     defer s.mutex.Unlock()
 
     delete(s.clients, GetConnID(c.conn))
-    // 没必要区分client gate和server gate，client gate也能路由s2s rpc
-    if CLIENT_IDENTITY_SERVICE_GATE == c.identity || CLIENT_IDENTITY_CLIENT_GATE == c.identity {
-        s.lb.DelElement(string(GetConnID(c.conn)))
-    }
-}
-
-func (s *TcpServer) onClientIdentityReport(conn net.Conn, identity int8) {
-    connID := GetConnID(conn)
-    client, ok := s.clients[connID]
-    if !ok {
-        ERROR_LOG("tcp client %s not exist~~~", connID)
-        return
-    }
-
-    client.identity = identity
-
-    if CLIENT_IDENTITY_SERVICE_GATE == identity || CLIENT_IDENTITY_CLIENT_GATE == identity {
-        s.lb.AddElement(string(connID))
-    }
+    s.lb.DelElement(string(GetConnID(c.conn)))
 }
 
 func (c *TcpClient) HandleRead() {

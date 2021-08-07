@@ -33,7 +33,7 @@ func (rmgr *RemoteMgr) OnRemoteDiscover(namespace string, svrName string, ip str
     connID := GenConnIDByIPPort(ip, port)
     _, ok := rmgr.remotes[connID]
     if ok {
-        WARN_LOG("remote %s:%s@%v already exist", namespace, svrName, connID)
+        // WARN_LOG("remote %s:%s@%v already exist", namespace, svrName, connID)
 
     } else {
         INFO_LOG("OnRemoteDiscover %s:%s@%v", namespace, svrName, connID)
@@ -106,11 +106,6 @@ func (rmgr *RemoteMgr) ConnectRemote(namespace string, svrName string, ip string
     }
     
     go rmgr.remotes[connID].HandleRead()
-
-    // 上报身份
-    rpc := RpcEncode(MSG_G2S_IDENTITY_REPORT, GetServerIdentity())
-    msg := MessageEncode(rpc)
-    MessageSend(c, msg)
 
     return nil
 }

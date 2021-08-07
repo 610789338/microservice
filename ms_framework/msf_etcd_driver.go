@@ -8,17 +8,22 @@ import (
     "fmt"
     "strings"
     "strconv"
+    "sync"
 )
 
 type EtcdDriver struct {
     mode     int8  // 0 - service regist  1 - service discover
     cli     *etcdctl.Client
     lease   *etcdctl.LeaseGrantResponse
+    exit    bool
+    leaseDV int
+    mutex   sync.Mutex
 }
 
 func (e *EtcdDriver) Start() {
     cli, err := etcdctl.New(etcdctl.Config{
         Endpoints:   GlobalCfg.Etcd,
+        // Endpoints:   []string {"127.0.0.1:2389"}, // for connect test
         DialTimeout: 5 * time.Second,
     })
 
@@ -27,16 +32,20 @@ func (e *EtcdDriver) Start() {
         return
     }
 
+    // 到这一步并没有建立网络连接
     // DEBUG_LOG("etcd driver client: %+v", cli)
 
     e.cli = cli
 
     if 0 == e.mode {
         e.ServiceRegist()
+        e.LeaseWatch()
     } else if 1 == e.mode {
         e.ServiceDiscover()
         e.ServiceWatch()
     }
+
+    e.exit = false
 }
 
 func (e *EtcdDriver) Stop() {
@@ -54,9 +63,40 @@ func (e *EtcdDriver) Stop() {
     if e.cli != nil {
         e.cli.Close()
     }
+
+    e.exit = true
+}
+
+func (e *EtcdDriver) LeaseWatch() {
+
+    go func() {
+        for !e.exit {
+            timeCh := time.After(time.Second * 5)
+            select {
+            case <- timeCh:
+                ctx, cancelGet := context.WithTimeout(context.Background(), 5 * time.Second)
+                defer cancelGet()
+                rsp, err := e.cli.Get(ctx, e.GenEtcdServiceKey())
+                if err != nil {
+                    ERROR_LOG(fmt.Sprintf("lease watch %s error %v", e.GenEtcdServiceKey(), err))
+                    continue
+                }
+
+                // INFO_LOG("etcd get key %s result %v-%s", e.GenEtcdServiceKey(), len(rsp.Kvs), rsp.Kvs)
+                
+                if len(rsp.Kvs) == 0 {
+                    INFO_LOG("etcd key %s lease invaild, retry regist", e.GenEtcdServiceKey())
+                    e.ServiceRegist()
+                }
+            }
+        }
+    } ()
 }
 
 func (e *EtcdDriver) ServiceRegist() {
+    e.mutex.Lock()
+    defer e.mutex.Unlock()
+
     // minimum lease ttl is 2 second
     // lease, err := e.cli.Grant(context.TODO(), 2)
     ctx, cancelGrant := context.WithTimeout(context.Background(), 5 * time.Second)
@@ -81,26 +121,40 @@ func (e *EtcdDriver) ServiceRegist() {
     }
 
     ka := <-ch
-    INFO_LOG("etcd lease id %v ttl %v", e.lease.ID, ka.TTL)
+    INFO_LOG("etcd new lease id %v ttl %v", e.lease.ID, ka.TTL)
 }
 
 func (e *EtcdDriver) ServiceDiscover() {
-    ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
-    defer cancel()
-    rsp, err := e.cli.Get(ctx, e.GenEtcdWatchKey(), etcdctl.WithPrefix())
-    if err != nil {
-        panic(fmt.Sprintf("etcd get error %v", err))
-    }
 
-    for _, ev := range rsp.Kvs {
-        remoteInfo := strings.Split(string(ev.Key), "/")
+    timeCh := time.After(time.Microsecond)
 
-        namespace := remoteInfo[2]
-        service := remoteInfo[3]
-        ip := strings.Split(remoteInfo[4], ":")[0]
-        port, _ := strconv.Atoi(strings.Split(remoteInfo[4], ":")[1])
-        OnRemoteDiscover(namespace, service, ip, uint32(port))
-    }
+    go func() {
+        for !e.exit {
+            select {
+            case <- timeCh:
+                ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+                defer cancel()
+                rsp, err := e.cli.Get(ctx, e.GenEtcdWatchKey(), etcdctl.WithPrefix())
+                if err != nil {
+                    ERROR_LOG(fmt.Sprintf("etcd get error %v", err))
+                    timeCh = time.After(time.Second * 5)
+                    continue
+                }
+
+                for _, ev := range rsp.Kvs {
+                    remoteInfo := strings.Split(string(ev.Key), "/")
+
+                    namespace := remoteInfo[2]
+                    service := remoteInfo[3]
+                    ip := strings.Split(remoteInfo[4], ":")[0]
+                    port, _ := strconv.Atoi(strings.Split(remoteInfo[4], ":")[1])
+                    OnRemoteDiscover(namespace, service, ip, uint32(port))
+                }
+
+                timeCh = time.After(time.Second * 5)
+            }
+        }
+    } ()
 }
 
 func (e *EtcdDriver) ServiceWatch() {
@@ -139,7 +193,8 @@ func (e *EtcdDriver) GenEtcdServiceKey() string {
 }
 
 func (e *EtcdDriver) GenEtcdServiceValue() string {
-    return "nil"
+    e.leaseDV += 1
+    return fmt.Sprintf("%d", e.leaseDV)
 }
 
 func (e *EtcdDriver) GenEtcdWatchKey() string {

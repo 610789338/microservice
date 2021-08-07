@@ -107,7 +107,7 @@ func (c *Client) StartPushTest(idx int) {
     // c.gate.Logoff(fmt.Sprintf("client%d", idx))
 }
 
-var IP = "10.246.13.142"
+var IP = "127.0.0.1"
 var Port int = 8886
 
 func main() {
@@ -156,7 +156,7 @@ func main() {
         Useage()
     }
 
-    msf.INFO_LOG("client mode cnt %v, test cnt %v", mode, clientCnt, testCnt)
+    msf.INFO_LOG("client %s mode cnt %v, test cnt %v", mode, clientCnt, testCnt)
 
     if "pushtest" == mode  {
         for i := 0; i < clientCnt ; i++ {
@@ -178,8 +178,8 @@ func Useage() {
 
     fmt.Printf("\n")
     fmt.Printf("--help:    print Useage\n")
-    fmt.Printf("-h    :    gate listen addr, default 10.246.13.142\n")
-    fmt.Printf("-p    :    gate listen port, default 8886\n")
+    fmt.Printf(fmt.Sprintf("-h    :    gate listen addr, default %s\n", IP))
+    fmt.Printf(fmt.Sprintf("-p    :    gate listen port, default %d\n", Port))
     fmt.Printf("-m    :    test mode, must in [testa, testb, dbtest, pushtest]\n")
     fmt.Printf("-c    :    client cnt(goroutine)\n")
     fmt.Printf("-t    :    rpc test cnt\n\n")

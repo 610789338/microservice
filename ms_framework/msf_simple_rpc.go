@@ -201,8 +201,6 @@ func CreateSimpleRpcMgr() {
 
     rpcMgr.RegistRpcHandler(MSG_HEART_BEAT_REQ,          func() RpcHandler {return new(RpcHeartBeatReqHandler)}) // for all
     rpcMgr.RegistRpcHandler(MSG_HEART_BEAT_RSP,          func() RpcHandler {return new(RpcHeartBeatRspHandler)}) // for all
-
-    rpcMgr.RegistRpcHandler(MSG_G2S_IDENTITY_REPORT,     func() RpcHandler {return new(RpcG2SIdentityReportHandler)}) // for ms service
 }
 
 func RegistRpcHandler(name string, gen RpcHanderGenerator) {

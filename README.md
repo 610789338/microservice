@@ -6,10 +6,10 @@
 * db - 数据库层，用于状态存储
 
 网络连接关系：
-service -> etcd&&db
-gate -> etcd&&db
-gate -> service
-client -> gate
+* service -> etcd&&db
+* gate -> etcd&&db
+* gate -> service
+* client -> gate
 
 # 集群特点
 集群所有进程作为一个整体向外界提供服务，具有以下特点：
@@ -102,17 +102,26 @@ gate作为tcp client和每个service建立连接，通过remote_mgr来管理到t
 
 ### c2s
 client向微服务集群发起rpc请求，整个过程是异步的，分为以下几步：
-* client to gate -> 客户端序列化rpc消息发送至gate，rpc中包含Rid，用来唯一标识一次请求，client本地缓存Rid<=>callback的映射关系
-* gate to service -> gate将消息路由至service，gate根据rpc中的service标识进行路由，对rpc消息进行重组打包发往service，rpc中包含GRid，用来唯一标识一次路由，gate本地缓存GRid<=>(Rid+client)的映射关系
-* service to gate -> service执行完逻辑后将结果和GRid返回给gate
-* gate -> client -> gate收到结果后根据GRid拿到Rid和client，将结果和Rid透传给client，client根据Rid调用callback
+* client to gate
+   客户端序列化rpc消息发送至gate，rpc中包含Rid，用来唯一标识一次请求，client本地缓存Rid<=>callback的映射关系
+* gate to service
+   gate将消息路由至service，gate根据rpc中的service标识进行路由，对rpc消息进行重组打包发往service
+   rpc中包含GRid，用来唯一标识一次路由，gate本地缓存GRid<=>(Rid+client)的映射关系
+* service to gate
+   service执行完逻辑后将结果和GRid返回给gate
+* gate -> client
+   gate收到结果后根据GRid拿到Rid和client，将结果和Rid透传给client，client根据Rid调用callback
 
 ### s2s
 service之间的服务调用流程和c2s类似（其中一个service作为client），不过s2s支持同步异步两种调用方式，同步调用是基于异步实现的，步骤为：
-* serviceA to gate -> serviceA将rpc序列化后发送至gate，然后创建channel，本地缓存Rid<=>channel映射关系，然后协程等待channel消息
-* gate -> serviceB -> 同c2s
-* serviceB -> gate -> 同c2s
-* gate -> serviceA -> gate将结果透传给serviceA，结果中带有Rid，serviceA根据Rid找到channel，将结果发送给channel，协程得以继续运行
+* serviceA to gate
+   serviceA将rpc序列化后发送至gate，然后创建channel，本地缓存Rid<=>channel映射关系，然后协程等待channel消息
+* gate -> serviceB
+   同c2s
+* serviceB -> gate
+   同c2s
+* gate -> serviceA
+   gate将结果透传给serviceA，结果中带有Rid，serviceA根据Rid找到channel，将结果发送给channel，协程得以继续运行
 
 
 ### s2c
@@ -122,17 +131,31 @@ service支持主动推送消息给client，由于gate有多份实例，所以需
 * gate根据clientConnID找到对应的client，将消息发送至client
 
 注：
-这里的client特指游戏中的对象，所以存在多个client共用一条tcp连接的情况，比如两个玩家在同一个游戏服务器进程上，游戏服务器进程作为client和gate就只有一条tcp连接
+这里的client特指游戏中的对象，所以存在多个client共用一条tcp连接的情况
+比如两个玩家在同一个游戏服务器进程上，游戏服务器进程作为client和gate就只有一条tcp连接
 目前推送微服务（push service）负责上诉流程，其他service通过s2s调用push service接口来实现推送功能
 
 # 服务发现
+### etcd
 集群采用etcd做服务发现
-* service启动时向etcd注册带租约的key，所有service的key前缀统一，后缀为service的ip:port信息
-* gate启动时向etcd获取前缀下的所有key，解析出ip:port逐一建立连接，并watch该前缀做到实时感知service上下线
+* service启动时向etcd注册带租约的key，所有service的key前缀统一，后缀为serviceName和ip:port信息
+* gate启动时向etcd获取前缀下的所有key（service列表），解析出ip:port逐一建立连接，并watch该前缀做到实时感知service上下线
 
+### gate侧的处理
+在gate侧，service上线的场景比较单一，只有etcd通知，但是service下线的场景比较复杂，分以下三种情况：
+* service主动断开连接
+   此时gate能主动感知，也能watch到etcd的delete事件，服务可正常下线
+* service <-> etcd之间的租约到期
+   比如service满负荷情况下未及时向etcd续约，或者service <-> etcd之间的网络路由故障
+   此时gate能收到etcd的delete事件，服务可正常下线
+* service <-> gate之间的连接失去响应
+   比如service <-> gate之间的网络路由故障，此时gate无法主动感知，也不会收到etcd的delete事件
+   所以在gate侧对service做活性检测（利用msf_tcp_server的heartbeat），若service长时间未响应则将其下线
+
+### 保障机制
 压测时发现当service负荷较大时会导致其在etcd的key租约过期，从而导致gate接收到service下线通知，此时service虽然运行正常却无法提供服务
 为避免这种情况，在service启动后增加租约监控，定时检测，若发现租约过期则进行重新注册
-在gate侧也定时拉取所有服务列表和本地service连接做对比，判断是否有漏连的service
+在gate侧也定时拉取所有service列表和本地service连接做对比，判断是否有漏连的service
 
 # clientsdk
 TODO

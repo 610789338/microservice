@@ -153,15 +153,15 @@ func (c *TcpClient) HandleRead() {
             if ok && e.Timeout() == true {
                 // WARN_LOG("read timeout %v", err)
 
-                // heart beat
                 now := GetNowTimestampMs()
                 if now - c.lastActiveTime > 10*1000 {
 
                     if now - c.lastActiveTime > 20*1000 {
-                        ERROR_LOG("tcp connect heartbeat timeout %v now(%v), last(%v)", c.conn.RemoteAddr(), now, c.lastActiveTime)
+                        ERROR_LOG("tcp connect %v heartbeat timeout %d", c.conn.RemoteAddr(), (c.lastActiveTime - now)/1000)
                         break
                     }
 
+                    // heart beat
                     rpc := rpcMgr.RpcEncode(MSG_HEART_BEAT_REQ)
                     msg := rpcMgr.MessageEncode(rpc)
                     if !c.HeartBeat(msg) {

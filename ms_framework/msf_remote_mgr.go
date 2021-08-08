@@ -26,6 +26,7 @@ type Remote struct {
     conn             net.Conn
     recvBuf          []byte
     remainLen        uint32
+    lastActiveTime   int64
 }
 
 func (rmgr *RemoteMgr) OnRemoteDiscover(namespace string, svrName string, ip string, port uint32) {
@@ -103,6 +104,7 @@ func (rmgr *RemoteMgr) ConnectRemote(namespace string, svrName string, ip string
         conn: c,
         recvBuf: make([]byte, RECV_BUF_MAX_LEN),
         remainLen: 0,
+        lastActiveTime: GetNowTimestampMs(),
     }
     
     go rmgr.remotes[connID].HandleRead()
@@ -112,15 +114,28 @@ func (rmgr *RemoteMgr) ConnectRemote(namespace string, svrName string, ip string
 
 func (r *Remote) HandleRead() {
     defer func() {
-        INFO_LOG("remote close %v", r.conn.RemoteAddr())
+        // INFO_LOG("remote close %v", r.conn.RemoteAddr())
         remoteMgr.OnRemoteDisappear(r.id, GetConnID(r.conn))
         r.conn.Close()
     } ()
 
     for true {
+        r.conn.SetReadDeadline(time.Now().Add(100*time.Millisecond))
         len, err := r.conn.Read(r.recvBuf[r.remainLen:])
         // INFO_LOG("remote read %v %v", len, err)
         if err != nil {
+            e, ok := err.(*net.OpError)
+            if ok && e.Timeout() == true {
+                // WARN_LOG("read timeout %v", err)
+
+                now := GetNowTimestampMs()
+                if now - r.lastActiveTime > 20*1000 {
+                    ERROR_LOG("remote %v connect timeout %d", r.conn.RemoteAddr(), (r.lastActiveTime - now)/1000)
+                    break
+                }
+                continue
+            }
+
             if err != io.EOF {
                 ERROR_LOG("read error %v", err)
                 break
@@ -132,6 +147,8 @@ func (r *Remote) HandleRead() {
             INFO_LOG("tcp connection close by remote %v %v", r.conn.RemoteAddr(), err)
             break
         }
+
+        r.lastActiveTime = GetNowTimestampMs()
 
         r.remainLen += uint32(len)
         if r.remainLen > RECV_BUF_MAX_LEN/2 {

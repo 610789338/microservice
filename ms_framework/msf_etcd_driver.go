@@ -75,10 +75,10 @@ func (e *EtcdDriver) LeaseWatch() {
             select {
             case <- timeCh:
                 ctx, cancelGet := context.WithTimeout(context.Background(), 5 * time.Second)
-                defer cancelGet()
                 rsp, err := e.cli.Get(ctx, e.GenEtcdServiceKey())
                 if err != nil {
                     ERROR_LOG(fmt.Sprintf("lease watch %s error %v", e.GenEtcdServiceKey(), err))
+                    cancelGet()
                     continue
                 }
 
@@ -88,6 +88,8 @@ func (e *EtcdDriver) LeaseWatch() {
                     INFO_LOG("etcd key %s lease invaild, retry regist", e.GenEtcdServiceKey())
                     e.ServiceRegist()
                 }
+                
+                cancelGet()
             }
         }
     } ()
@@ -151,7 +153,8 @@ func (e *EtcdDriver) ServiceDiscover() {
                     OnRemoteDiscover(namespace, service, ip, uint32(port))
                 }
 
-                timeCh = time.After(time.Second * 5)
+                // 10分钟全量拉一次
+                timeCh = time.After(time.Second * 60 * 10)
             }
         }
     } ()

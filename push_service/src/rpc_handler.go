@@ -72,7 +72,7 @@ func (r *RpcPushUnsafeHandler) Process(session *msf.Session) {
     
     rpc := msf.RpcEncode(msf.MSG_P2G_PUSH, clientConnID, r.req.Msg)
     msg := msf.MessageEncode(rpc)
-    client := msf.GetClient(msf.CONN_ID(connID))
+    client := msf.GetTcpClient(msf.CONN_ID(connID))
     if nil == client {
         msf.ERROR_LOG("gate client(%s) not exist", connID)
         return

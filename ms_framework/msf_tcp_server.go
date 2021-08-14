@@ -40,9 +40,15 @@ type TcpClient struct {
     conn            net.Conn
     recvBuf         []byte
     remainLen       uint32
-    exit            bool
     lastActiveTime  int64
+    state           int8
 }
+
+const (
+    TcpClientState_Init         int8 = iota
+    TcpClientState_OK
+    TcpClientState_EXIT
+)
 
 func (s *TcpServer) Start() {
     listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.ip, s.port))
@@ -77,11 +83,16 @@ func (s *TcpServer) Start() {
                 break
             }
 
+            state := TcpClientState_OK
+            if GetServerIdentity() == SERVER_IDENTITY_CLIENT_GATE {
+                state = TcpClientState_Init
+            }
+
             s.clients[connID] = &TcpClient{
                 conn: conn, 
                 recvBuf: make([]byte, RECV_BUF_MAX_LEN), 
                 remainLen: 0, 
-                exit: false, 
+                state: state, 
                 lastActiveTime: GetNowTimestampMs(),
             }
             s.mutex.Unlock()
@@ -104,7 +115,7 @@ func (s *TcpServer) Stop(){
 
     s.mutex.Lock()
     for _, client := range s.clients {
-        client.exit = true
+        client.state = TcpClientState_EXIT
     }
 
     s.stop = true
@@ -145,7 +156,7 @@ func (c *TcpClient) HandleRead() {
         c.Close()
     } ()
 
-    for !c.exit {
+    for c.state != TcpClientState_EXIT {
         c.conn.SetReadDeadline(time.Now().Add(100*time.Millisecond))
         rLen, err := c.conn.Read(c.recvBuf[c.remainLen:])
         if err != nil {
@@ -210,6 +221,7 @@ func (c *TcpClient) HandleRead() {
 
 func (c *TcpClient) Close() {
     INFO_LOG("tcp client close %v", c.conn.RemoteAddr())
+    c.conn.Close()
     tcpServer.onClientClose(c)
 }
 
@@ -237,6 +249,10 @@ func (c *TcpClient) HeartBeat(msg []byte) bool {
     }
 
     return true
+}
+
+func (c *TcpClient) SetState(state int8) {
+    c.state = state
 }
 
 var tcpServer *TcpServer = nil
@@ -276,7 +292,7 @@ func GetTcpServer() *TcpServer {
     return tcpServer
 }
 
-func GetClient(connID CONN_ID) *TcpClient {
+func GetTcpClient(connID CONN_ID) *TcpClient {
     tcpServer.mutex.RLock()
     defer tcpServer.mutex.RUnlock()
 

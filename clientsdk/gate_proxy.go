@@ -90,25 +90,26 @@ func (g *GateProxy) LocalAddr() string {
 }
 
 func CreateGateProxy(_ip string, _port int) *GateProxy {
-    g, err := net.Dial("tcp", fmt.Sprintf("%s:%d", _ip, _port))
+    conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", _ip, _port))
     if err != nil {
         msf.ERROR_LOG("connect %s:%d error %v", _ip, _port, err)
         return nil
     }
 
-    msf.INFO_LOG("connect %s:%d success %v", _ip, _port, g)
+    msf.INFO_LOG("connect %s:%d success %v", _ip, _port, conn)
 
-    gp := &GateProxy {
+    g := &GateProxy {
         ip:   _ip,
         port: _port,
-        conn: g, 
+        conn: conn, 
         recvBuf: make([]byte, msf.RECV_BUF_MAX_LEN), 
         remainLen: 0,
     }
 
-    gp.Start()
+    g.RpcCall(msf.MSG_C2G_VERTIFY, msf.VERTIFY_SECRET_KEY)
+    g.Start()
 
-    return gp
+    return g
 }
 
 func (g *GateProxy) CreateServiceProxy(namespace string, serviceName string) *ServiceProxy {

@@ -21,6 +21,7 @@ func main() {
 
     msf.RegistRpcHandler(msf.MSG_P2G_REQ_LISTENADDR,      func() msf.RpcHandler {return new(RpcReqListenAddrHandler)})
     msf.RegistRpcHandler(msf.MSG_P2G_PUSH,                func() msf.RpcHandler {return new(RpcP2GPushHandler)})
+    msf.RegistRpcHandler(msf.MSG_C2G_VERTIFY,             func() msf.RpcHandler {return new(RpcC2GVertifyHandler)})
 
     msf.Start()
 }

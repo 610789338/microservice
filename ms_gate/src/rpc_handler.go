@@ -128,7 +128,7 @@ func (r *RpcS2GRpcRspHandler) Process(session *msf.Session) {
     rid, connID := cbInfo.rid, cbInfo.connID
 
     var conn net.Conn
-    if client := msf.GetClient(connID); client != nil {
+    if client := msf.GetTcpClient(connID); client != nil {
         conn = client.GetConn()
     } else if remote := msf.GetRemote(connID); remote != nil {
         conn = remote.GetConn()
@@ -266,13 +266,43 @@ func (r *RpcP2GPushHandler) GetRspPtr() interface{} {return nil}
 
 func (r *RpcP2GPushHandler) Process(session *msf.Session) {
     
-    client := msf.GetClient(msf.CONN_ID(r.req.ConnID))
+    client := msf.GetTcpClient(msf.CONN_ID(r.req.ConnID))
     if nil == client {
-        msf.ERROR_LOG("[PUSH2CLIENT] get client(%s) not exist", r.req.ConnID)
+        msf.ERROR_LOG("[push2client] get client(%s) not exist", r.req.ConnID)
         return
     }
 
-    msf.DEBUG_LOG("[PUSH2CLIENT] connID - %s client - %s", r.req.ConnID, client.RemoteAddr())
+    msf.DEBUG_LOG("[push2client] connID - %s client - %s", r.req.ConnID, client.RemoteAddr())
     msf.MessageSend(client.GetConn(), r.req.Msg)
+}
+
+
+// MSG_C2G_VERTIFY
+type RpcC2GVertifyReq struct {
+    SecretKey   string
+}
+
+type RpcC2GVertifyHandler struct {
+    req         RpcC2GVertifyReq
+}
+
+func (r *RpcC2GVertifyHandler) GetReqPtr() interface{} {return &(r.req)}
+func (r *RpcC2GVertifyHandler) GetRspPtr() interface{} {return nil}
+
+func (r *RpcC2GVertifyHandler) Process(session *msf.Session) {
+    if r.req.SecretKey != msf.VERTIFY_SECRET_KEY {
+        msf.ERROR_LOG("[c2g vertify] tcp client %s vertify key error %s != %s", msf.GetConnID(session.GetConn()), r.req.SecretKey, msf.VERTIFY_SECRET_KEY)
+        return
+    }
+
+    connID := msf.GetConnID(session.GetConn())
+    tcpClient := msf.GetTcpClient(connID)
+    if nil == tcpClient {
+        msf.ERROR_LOG("[c2g vertify] tcp client %s not exist", connID)
+        return
+    }
+
+    msf.INFO_LOG("[c2g vertify] tcp client %s vertify %s success", connID, r.req.SecretKey)
+    tcpClient.SetState(msf.TcpClientState_OK)
 }
 

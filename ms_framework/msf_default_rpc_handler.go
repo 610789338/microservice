@@ -26,6 +26,7 @@ var MSG_PUSH_UNSAFE             = "l"  // push service method - unsafe push
 var MSG_PUSH_SAFE               = "m"  // push service method - safe push
 
 var MSG_P2G_PUSH                = "n"  // push service to gate push
+var MSG_C2G_VERTIFY             = "g"  // client to gate vertify
 
 
 

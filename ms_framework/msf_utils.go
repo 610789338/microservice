@@ -9,6 +9,8 @@ import (
     "strings"
 )
 
+var VERTIFY_SECRET_KEY = "a58a8b450770a3f42515e08d7125d76b"
+
 func ReadInt8(buf []byte) int8 {
     return int8(ReadUint8(buf))
 }

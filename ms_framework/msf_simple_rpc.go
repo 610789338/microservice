@@ -349,9 +349,16 @@ func RpcCallAsync(serviceName string, rpcName string, args ...interface{}) {
 
 // PushUnsafe("client1", "server", "push_test", int32(10), "hi bao")
 func PushUnsafe(clientID string, tpe string, rpcName string, args ...interface{}) {
+    innerRpc := rpcMgr.RpcEncode(rpcName, args...)
+    // msg := rpcMgr.MessageEncode(innerRpc)
+    // DEBUG_LOG("---for debug %d", len(innerRpc))
+    RpcCallAsync("PushService", MSG_S2P_PUSH, clientID, tpe, false, innerRpc)
+}
+
+func PushSafe(clientID string, tpe string, rpcName string, args ...interface{}) {
     rpc := rpcMgr.RpcEncode(rpcName, args...)
     msg := rpcMgr.MessageEncode(rpc)
-    RpcCallAsync("PushService", MSG_PUSH_UNSAFE, clientID, tpe, msg)
+    RpcCallAsync("PushService", MSG_S2P_PUSH, clientID, tpe, true, msg)
 }
 
 func PushServerUnsafe(clientID string, rpcName string, args ...interface{}) {
@@ -360,4 +367,12 @@ func PushServerUnsafe(clientID string, rpcName string, args ...interface{}) {
 
 func PushClientUnsafe(clientID string, rpcName string, args ...interface{}) {
     PushUnsafe(clientID, "client", rpcName, args...)
+}
+
+func PushServerSafe(clientID string, rpcName string, args ...interface{}) {
+    PushSafe(clientID, "server", rpcName, args...)
+}
+
+func PushClientSafe(clientID string, rpcName string, args ...interface{}) {
+    PushSafe(clientID, "client", rpcName, args...)
 }

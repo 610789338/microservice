@@ -27,21 +27,22 @@ func (r *RpcRspListenAddrHandler) Process(session *msf.Session) {
 }
 
 
-// MSG_PUSH_UNSAFE
-type RpcPushUnsafeReq struct {
+// MSG_S2P_PUSH
+type RpcS2PPushReq struct {
     ClientID    string
     Typ         string
-    Msg         []byte
+    IsSafe      bool
+    InnerRpc    []byte
 }
 
-type RpcPushUnsafeHandler struct {
-    req     RpcPushUnsafeReq
+type RpcS2PPushHandler struct {
+    req     RpcS2PPushReq
 }
 
-func (r *RpcPushUnsafeHandler) GetReqPtr() interface{} {return &(r.req)}
-func (r *RpcPushUnsafeHandler) GetRspPtr() interface{} {return nil}
+func (r *RpcS2PPushHandler) GetReqPtr() interface{} {return &(r.req)}
+func (r *RpcS2PPushHandler) GetRspPtr() interface{} {return nil}
 
-func (r *RpcPushUnsafeHandler) Process(session *msf.Session) {
+func (r *RpcS2PPushHandler) Process(session *msf.Session) {
 
     key := ""
     if "server" == r.req.Typ {
@@ -66,11 +67,16 @@ func (r *RpcPushUnsafeHandler) Process(session *msf.Session) {
 
     connID, ok := gGateAddrMap[gateAddr]
     if !ok {
-        msf.ERROR_LOG("gate port(%s) not exist", gateAddr)
+        msf.ERROR_LOG("gate addr(%s) not exist", gateAddr)
         return
     }
     
-    rpc := msf.RpcEncode(msf.MSG_P2G_PUSH, clientConnID, r.req.Msg)
+    rid := uint32(0)
+    if r.req.IsSafe {
+        rid = msf.GenGid()   
+    }
+
+    rpc := msf.RpcEncode(msf.MSG_P2G_PUSH, clientConnID, rid, r.req.InnerRpc)
     msg := msf.MessageEncode(rpc)
     client := msf.GetTcpClient(msf.CONN_ID(connID))
     if nil == client {
@@ -79,8 +85,8 @@ func (r *RpcPushUnsafeHandler) Process(session *msf.Session) {
     }
 
     msf.MessageSend(client.GetConn(), msg)
+
+    if rid != 0 {
+        // add call back
+    }
 }
-
-
-// MSG_PUSH_SAFE
-// TODO

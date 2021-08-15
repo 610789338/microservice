@@ -64,12 +64,15 @@ func (r *RpcC2GRpcRouteHandler) Process(session *msf.Session) {
             }        
         }
         
-        if len(err) != 0 {    
-            // error response
+        if len(err) != 0 {   
             msf.INFO_LOG("[rpc route] - [%s:%s] rid[%v] response[%v]", r.req.NameSpace, r.req.Service, r.req.Rid, err)
-            rpc := msf.RpcEncode(msf.MSG_G2C_RPC_RSP, r.req.Rid, err, nil)
-            msg := msf.MessageEncode(rpc)
-            msf.MessageSend(session.GetConn(), msg)
+
+            if r.req.Rid != 0 { 
+                // error response
+                rpc := msf.RpcEncode(msf.MSG_G2C_RPC_RSP, r.req.Rid, err, nil)
+                msg := msf.MessageEncode(rpc)
+                msf.MessageSend(session.GetConn(), msg)
+            }
             return
         }
     }
@@ -78,8 +81,6 @@ func (r *RpcC2GRpcRouteHandler) Process(session *msf.Session) {
     remote := msf.ChoiceRemote(remoteID)
 
     if remote != nil {
-
-        // DEBUG_LOG("[RpcC2GRpcRouteHandler] - SERVICE - [%s:%s] rid[%v] response[nil]", r.req.NameSpace, r.req.Service, r.req.Rid)
 
         grid := uint32(0)
         if r.req.Rid != 0 {
@@ -114,6 +115,8 @@ func (r *RpcC2GRpcRouteHandler) Process(session *msf.Session) {
             msf.AddCallBack(grid, []interface{}{cbInfo}, 101, nil)
         }
 
+        // msf.DEBUG_LOG("[RpcC2GRpcRouteHandler] - SERVICE - [%s:%s] rid[%v] grid[%v]", r.req.NameSpace, r.req.Service, r.req.Rid, grid)
+
         rpc := msf.RpcEncode(msf.MSG_G2S_RPC_CALL, grid, r.req.InnerRpc)
         msg := msf.MessageEncode(rpc)
         msf.MessageSend(remote.GetConn(), msg)
@@ -123,10 +126,12 @@ func (r *RpcC2GRpcRouteHandler) Process(session *msf.Session) {
         err := fmt.Sprintf("service %s:%s not exist", r.req.NameSpace, r.req.Service)
         msf.INFO_LOG("[rpc route] - [%s:%s] rid[%v] response[%v]", r.req.NameSpace, r.req.Service, r.req.Rid, err)
 
-        // error response
-        rpc := msf.RpcEncode(msf.MSG_G2C_RPC_RSP, r.req.Rid, err, nil)
-        msg := msf.MessageEncode(rpc)
-        msf.MessageSend(session.GetConn(), msg)
+        if r.req.Rid != 0 {
+            // error response
+            rpc := msf.RpcEncode(msf.MSG_G2C_RPC_RSP, r.req.Rid, err, nil)
+            msg := msf.MessageEncode(rpc)
+            msf.MessageSend(session.GetConn(), msg)
+        }
     }
 }
 
@@ -283,7 +288,8 @@ func (r *RpcReqListenAddrHandler) Process(session *msf.Session) {
 // MSG_P2G_PUSH
 type RpcP2GPushReq struct {
     ConnID        string
-    Msg           []byte
+    Rid           uint32
+    InnerRpc      []byte
 }
 
 type RpcP2GPushHandler struct {
@@ -302,7 +308,10 @@ func (r *RpcP2GPushHandler) Process(session *msf.Session) {
     }
 
     msf.DEBUG_LOG("[push2client] connID - %s client - %s", r.req.ConnID, client.RemoteAddr())
-    msf.MessageSend(client.GetConn(), r.req.Msg)
+
+    rpc := msf.RpcEncode(msf.MSG_G2C_PUSH, r.req.Rid, r.req.InnerRpc)
+    msg := msf.MessageEncode(rpc)
+    msf.MessageSend(client.GetConn(), msg)
 }
 
 

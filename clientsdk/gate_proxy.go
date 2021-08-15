@@ -7,7 +7,9 @@ import (
     // "time"
     "io"
     "reflect"
-    "sync"
+    // "sync"
+    "github.com/vmihailenco/msgpack"
+    "bytes"
 )
 
 
@@ -123,44 +125,34 @@ type ServiceProxy struct {
     ServiceName       string
 }
 
-// c2s的rpc调用，最后一个参数若是Func，则建立rid<->callback的缓存
+// c2s的rpc调用，最后一个参数若是CallBack，则建立rid<->callback的缓存
 func (g *ServiceProxy) RpcCall(rpcName string, args ...interface{}) {
 
     var rid uint32 = 0
     if len(args) > 0 {
         lastArg := args[len(args)-1]
-        t := reflect.TypeOf(lastArg)
-        if t.Kind() == reflect.Func {
-            rid = GenGid()
-
-            timeoutCb := func() {
-                error := fmt.Sprintf("rpc call %s:%s:%s time out", g.Namespace, g.ServiceName, rpcName)
-                lastArg.(CallBack)(error, nil)
-            }
-
-            msf.AddCallBack(rid, []interface{}{lastArg.(CallBack)}, 100, timeoutCb)
+        // t := reflect.TypeOf(lastArg)
+        cb, ok := lastArg.(CallBack)
+        if ok {
             args = args[:len(args)-1]
+            if cb != nil {
+                // msf.DEBUG_LOG("rpc last arg is %v %T %v", lastArg, lastArg, cb)
+                rid = msf.GenGid()
+
+                timeoutCb := func() {
+                    error := fmt.Sprintf("rpc call %s:%s:%s time out", g.Namespace, g.ServiceName, rpcName)
+                    lastArg.(CallBack)(error, nil)
+                }
+
+                msf.AddCallBack(rid, []interface{}{lastArg.(CallBack)}, 100, timeoutCb)
+            }
         }
     }
 
-    // msf.DEBUG_LOG("rpc call %s args %v", rpcName, args)
+    // msf.DEBUG_LOG("rpc call %s args %v rid %d", rpcName, args, rid)
 
     innerRpc := msf.GetRpcMgr().RpcEncode(rpcName, args...)
     g.Gp.RpcCall(msf.MSG_C2G_RPC_ROUTE, g.Namespace, g.ServiceName, rid, innerRpc)
-}
-
-// 单个实例唯一的gid
-var globalGID uint32 = 0
-var gidMutex sync.Mutex
-
-func GenGid() uint32 {
-    var ret uint32
-    gidMutex.Lock()
-    globalGID += 1
-    ret = globalGID
-    gidMutex.Unlock()
-
-    return ret
 }
 
 // MSG_G2C_RPC_RSP
@@ -191,8 +183,58 @@ func (r *RpcG2CRpcRspHandler) Process(session *msf.Session) {
     }
 }
 
+// MSG_G2C_PUSH
+type RpcG2CPushReq struct {
+    Rid             uint32
+    InnerRpc        []byte
+}
+
+type RpcG2CPushHandler struct {
+    req     RpcG2CPushReq
+}
+
+func (r *RpcG2CPushHandler) GetReqPtr() interface{} {return &(r.req)}
+func (r *RpcG2CPushHandler) GetRspPtr() interface{} {return nil}
+
+func (r *RpcG2CPushHandler) Process(session *msf.Session) {
+
+    // msf.DEBUG_LOG("---for debug %d", len(r.req.InnerRpc))
+    decoder := msgpack.NewDecoder(bytes.NewBuffer(r.req.InnerRpc))
+
+    var rpcName string
+    decoder.Decode(&rpcName)
+
+    handlerGen, ok := msf.GetRpcMgr().GetRpcHanderGenerator(rpcName)
+    if !ok {
+        msf.ERROR_LOG("rpc %s not exist", rpcName)
+        return
+    }
+
+    handler := handlerGen()
+    reqPtr := reflect.ValueOf(handler.GetReqPtr())
+    if handler.GetReqPtr() != nil && !reqPtr.IsNil() {
+        stValue := reqPtr.Elem()
+        for i := 0; i < stValue.NumField(); i++ {
+            nv := reflect.New(stValue.Field(i).Type())
+            if err := decoder.Decode(nv.Interface()); err != nil {
+                msf.ERROR_LOG("rpc %s arg %s(%v) decode error: %v", rpcName, stValue.Type().Field(i).Name, nv.Type(), err)
+                return
+            }
+
+            stValue.Field(i).Set(nv.Elem())
+        }
+    }
+
+    handler.Process(session)
+
+    if r.req.Rid != 0 {
+        // TODO
+    }
+}
+
 func init() {
     msf.CreateSimpleRpcMgr()
-    msf.RegistRpcHandlerForce(msf.MSG_G2C_RPC_RSP,     func() msf.RpcHandler {return new(RpcG2CRpcRspHandler)})
+    msf.RegistRpcHandlerForce(msf.MSG_G2C_RPC_RSP,      func() msf.RpcHandler {return new(RpcG2CRpcRspHandler)})
+    msf.RegistRpcHandlerForce(msf.MSG_G2C_PUSH,         func() msf.RpcHandler {return new(RpcG2CPushHandler)})
     msf.StartTaskPool()
 }

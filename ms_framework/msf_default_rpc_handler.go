@@ -22,10 +22,10 @@ var MSG_GATE_LOGOFF             = "i"  // client logoff from gate
 var MSG_P2G_REQ_LISTENADDR      = "j"  // push service to gate request listen addr
 var MSG_G2P_RSP_LISTENADDR      = "k"  // gate service to push response listen addr
 
-var MSG_PUSH_UNSAFE             = "l"  // push service method - unsafe push
-var MSG_PUSH_SAFE               = "m"  // push service method - safe push
+var MSG_S2P_PUSH                = "l"  // service to push service
+var MSG_P2G_PUSH                = "m"  // push service to gate
+var MSG_G2C_PUSH                = "n"  // gate to client
 
-var MSG_P2G_PUSH                = "n"  // push service to gate push
 var MSG_C2G_VERTIFY             = "g"  // client to gate vertify
 var MSG_S2G_RPC_ACCESS_REPORT   = "o"  // service to gate rpc access report
 
@@ -94,10 +94,7 @@ func (r *RpcG2SRpcCallHandler) rpc_handler(session *Session) (string, map[string
     if r.req.GRid != 0 {
         rspPtr := reflect.ValueOf(handler.GetRspPtr())
         if handler.GetRspPtr() == nil || rspPtr.IsNil() {
-            if r.req.GRid != 0 {
-                return fmt.Sprintf("rpc %s need response but get nil", rpcName), nil
-            }
-            return "", nil
+            return fmt.Sprintf("rpc %s need response but get nil", rpcName), nil
         }
 
         // for response

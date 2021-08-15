@@ -11,7 +11,7 @@ var LOG_LEVEL_INFO int8 = 2
 var LOG_LEVEL_WARN int8 = 3
 var LOG_LEVEL_ERROR int8 = 4
 
-var logLevel int8 = LOG_LEVEL_DEBUG
+var gLogLevel int8 = LOG_LEVEL_DEBUG
 
 var LOG_LEVEL_DICT map[string]int8 = map[string]int8 {
     "DEBUG": 1,
@@ -22,20 +22,19 @@ var LOG_LEVEL_DICT map[string]int8 = map[string]int8 {
 
 func SetLogLevel(level string) {
 
-    l := LOG_LEVEL_DICT[level]
+    l, ok := LOG_LEVEL_DICT[level]
+    if !ok {
+        ERROR_LOG("error log level %s set default(DEBUG)", level)
+        gLogLevel = LOG_LEVEL_DEBUG
+        return
+    }
 
-    if     l != LOG_LEVEL_DEBUG && 
-        l != LOG_LEVEL_INFO && 
-        l != LOG_LEVEL_WARN && 
-        l != LOG_LEVEL_ERROR {
-            panic(fmt.Sprintf("error log level %d", l))
-        }
-
-    logLevel = l
+    gLogLevel = l
 }
 
-func LOG(ll int8, level string, format string, params ...interface{}) {
-    if ll < logLevel {
+func LOG(level string, format string, params ...interface{}) {
+    ll, _ := LOG_LEVEL_DICT[level]
+    if ll < gLogLevel {
         return
     }
 
@@ -48,7 +47,7 @@ func LOG(ll int8, level string, format string, params ...interface{}) {
     }
 }
 
-func DEBUG_LOG(format string, params ...interface{} ) {LOG(1, "DEBUG", format, params...)}
-func INFO_LOG(format string, params ...interface{} ) {LOG(2, "INFO", format, params...)}
-func WARN_LOG(format string, params ...interface{} ) {LOG(3, "WARN", format, params...)}
-func ERROR_LOG(format string, params ...interface{} ) {LOG(4, "ERROR", format, params...)}
+func DEBUG_LOG(format string, params ...interface{} ) {LOG("DEBUG", format, params...)}
+func INFO_LOG (format string, params ...interface{} ) {LOG("INFO",  format, params...)}
+func WARN_LOG (format string, params ...interface{} ) {LOG("WARN",  format, params...)}
+func ERROR_LOG(format string, params ...interface{} ) {LOG("ERROR", format, params...)}

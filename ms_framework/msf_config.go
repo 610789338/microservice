@@ -52,6 +52,7 @@ func ParseArgs() {
                 panic(fmt.Sprintf("args parse error -c need follow config filename"))
             }
             LoadConfig(os.Args[idx], &GlobalCfg)
+            SetLogLevel(GlobalCfg.LogLevel)
         }
     }
 }

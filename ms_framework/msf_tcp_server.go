@@ -100,6 +100,10 @@ func (s *TcpServer) Start() {
             s.lb.AddElement(string(connID))
 
             go s.clients[connID].HandleRead()
+            
+            if GetServerIdentity() == SERVER_IDENTITY_SERVICE {
+                s.clients[connID].RpcPermissionReport()
+            }
 
             onTcpAcceptBusi(s.clients[connID])
         }
@@ -173,9 +177,7 @@ func (c *TcpClient) HandleRead() {
                     }
 
                     // heart beat
-                    rpc := rpcMgr.RpcEncode(MSG_HEART_BEAT_REQ)
-                    msg := rpcMgr.MessageEncode(rpc)
-                    if !c.HeartBeat(msg) {
+                    if !c.HeartBeat() {
                         break
                     }
                 }
@@ -242,13 +244,23 @@ func (c *TcpClient) GetConn() net.Conn {
     return c.conn
 }
 
-func (c *TcpClient) HeartBeat(msg []byte) bool {
+func (c *TcpClient) HeartBeat() bool {
 
+    rpc := rpcMgr.RpcEncode(MSG_HEART_BEAT_REQ)
+    msg := rpcMgr.MessageEncode(rpc)
     if !MessageSend(c.conn, msg) {
         return false
     }
 
     return true
+}
+
+func (c *TcpClient) RpcPermissionReport() {
+
+    rpc := rpcMgr.RpcEncode(MSG_S2G_RPC_ACCESS_REPORT, 
+        fmt.Sprintf("%s:%s", GlobalCfg.Namespace, GlobalCfg.Service), rpcMgr.clientAccess)
+    msg := rpcMgr.MessageEncode(rpc)
+    MessageSend(c.conn, msg)
 }
 
 func (c *TcpClient) SetState(state int8) {

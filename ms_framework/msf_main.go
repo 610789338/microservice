@@ -53,19 +53,12 @@ func SetStopBusi(f func()) {
     StopBusi = f
 }
 
-func Init() {
+func init() {
     runtime.GOMAXPROCS(runtime.NumCPU())
-
     ParseArgs()
-    
-    SetLogLevel(GlobalCfg.LogLevel)
+}
 
-    if "ServiceGate" == GlobalCfg.Service {
-        SetServerIdentity(SERVER_IDENTITY_SERVICE_GATE)
-    } else if "ClientGate" == GlobalCfg.Service {
-        SetServerIdentity(SERVER_IDENTITY_CLIENT_GATE)
-    }
-
+func Init() {
     CreateSimpleRpcMgr()
     CreateRemoteMgr()
 
@@ -76,6 +69,8 @@ func Init() {
 }
 
 func Start() {
+    StopRcpHandlerRegist()
+
     StartTaskPool()
     StartTcpServer()
     StartEtcdDriver()

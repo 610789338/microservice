@@ -27,6 +27,7 @@ var MSG_PUSH_SAFE               = "m"  // push service method - safe push
 
 var MSG_P2G_PUSH                = "n"  // push service to gate push
 var MSG_C2G_VERTIFY             = "g"  // client to gate vertify
+var MSG_S2G_RPC_ACCESS_REPORT   = "o"  // service to gate rpc access report
 
 
 

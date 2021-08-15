@@ -25,6 +25,10 @@ func (session *Session) GetConn() net.Conn {
     return session.conn
 }
 
+func (session *Session) GetType() int8 {
+    return session.typ
+}
+
 func CreateSession(typ int8, conn net.Conn) *Session {
     return &Session{typ: typ, conn: conn}
 }
@@ -66,21 +70,47 @@ type RpcHandler interface {
 
 type RpcHanderGenerator func() RpcHandler
 
+type RpcClientPermission interface {
+    ClientAccess() bool
+}
+
 type SimpleRpcMgr struct {
-    rpcs     map[string]RpcHanderGenerator
+    rpcs            map[string]RpcHanderGenerator
+    clientAccess    map[string]bool
+    stopRegist      bool
 }
 
 func (rmgr *SimpleRpcMgr) RegistRpcHandler(name string, gen RpcHanderGenerator) {
+    if rmgr.stopRegist {
+        panic("can not retist rpc handler now")
+    }
+
     _, ok := rmgr.rpcs[name]
     if ok {
         panic(fmt.Sprintf("RegistRpcHandler %s repeat !!!", name))
     }
 
     rmgr.rpcs[name] = gen
+    rmgr.GenClientAccess(name, gen)
 }
 
 func (rmgr *SimpleRpcMgr) RegistRpcHandlerForce(name string, gen RpcHanderGenerator) {
+    if rmgr.stopRegist {
+        panic("can not retist rpc handler now")
+    }
+
     rmgr.rpcs[name] = gen
+    rmgr.GenClientAccess(name, gen)
+}
+
+func (rmgr *SimpleRpcMgr) GenClientAccess(name string, gen RpcHanderGenerator) {
+    handler := gen()
+    access, ok := handler.(RpcClientPermission)
+    if ok && access.ClientAccess() {
+        rmgr.clientAccess[name] = true
+    } else {
+        rmgr.clientAccess[name] = false
+    }
 }
 
 func (rmgr *SimpleRpcMgr) MessageDecode(session *Session, msg []byte) uint32 {
@@ -110,7 +140,7 @@ func (rmgr *SimpleRpcMgr) MessageDecode(session *Session, msg []byte) uint32 {
 
             // client gate对client的校验
             if GetServerIdentity() == SERVER_IDENTITY_CLIENT_GATE {
-                
+
                 tcpClient := GetTcpClient(GetConnID(session.conn))
                 if tcpClient != nil && tcpClient.state != TcpClientState_OK {
 
@@ -214,7 +244,7 @@ func GetRpcMgr() *SimpleRpcMgr {
 }
 
 func CreateSimpleRpcMgr() {
-    rpcMgr = &SimpleRpcMgr{rpcs: make(map[string]RpcHanderGenerator)}
+    rpcMgr = &SimpleRpcMgr{rpcs: make(map[string]RpcHanderGenerator), clientAccess: make(map[string]bool), stopRegist: false}
 
     // default handler
     rpcMgr.RegistRpcHandler(MSG_G2S_RPC_CALL,            func() RpcHandler {return new(RpcG2SRpcCallHandler)})      // for service
@@ -223,6 +253,10 @@ func CreateSimpleRpcMgr() {
 
     rpcMgr.RegistRpcHandler(MSG_HEART_BEAT_REQ,          func() RpcHandler {return new(RpcHeartBeatReqHandler)}) // for all
     rpcMgr.RegistRpcHandler(MSG_HEART_BEAT_RSP,          func() RpcHandler {return new(RpcHeartBeatRspHandler)}) // for all
+}
+
+func StopRcpHandlerRegist() {
+    rpcMgr.stopRegist = true
 }
 
 func RegistRpcHandler(name string, gen RpcHanderGenerator) {

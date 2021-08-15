@@ -26,6 +26,7 @@ type RpcAHandler struct {
 
 func (r *RpcAHandler) GetReqPtr() interface{} {return &(r.req)}
 func (r *RpcAHandler) GetRspPtr() interface{} {return &(r.rsp)}
+func (r *RpcAHandler) ClientAccess() bool {return true}
 
 func (r *RpcAHandler) Process(session *msf.Session) {
     r.rsp.Success = true

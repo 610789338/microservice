@@ -139,10 +139,10 @@ func main() {
                     panic(fmt.Sprintf("-m %v error must in [testa, testb, dbtest, pushtest]", mode))
                 }
 
-            case "-c":
+            case "-n":
                 idx++
                 if clientCnt, err = strconv.Atoi(os.Args[idx]); err != nil {
-                    panic(fmt.Sprintf("-c %v error, must be number", os.Args[idx]))
+                    panic(fmt.Sprintf("-n %v error, must be number", os.Args[idx]))
                 }
 
             case "-t":
@@ -181,12 +181,12 @@ func Useage() {
     fmt.Printf(fmt.Sprintf("-h    :    gate listen addr, default %s\n", IP))
     fmt.Printf(fmt.Sprintf("-p    :    gate listen port, default %d\n", Port))
     fmt.Printf("-m    :    test mode, must in [testa, testb, dbtest, pushtest]\n")
-    fmt.Printf("-c    :    client cnt(goroutine)\n")
+    fmt.Printf("-n    :    client cnt(goroutine)\n")
     fmt.Printf("-t    :    rpc test cnt\n\n")
 
     fmt.Printf("for example:\n")
-    fmt.Printf("./client -m testa -c 5 -t 1000\n")
-    fmt.Printf("./client -h 10.246.13.142 -p 8886 -m pushtest -c 1 -t 10\n")
+    fmt.Printf("./client -m testa -n 5 -t 1000\n")
+    fmt.Printf("./client -h 10.246.13.142 -p 8886 -m pushtest -n 1 -t 10\n")
     fmt.Printf("\n")
 
     os.Exit(0)

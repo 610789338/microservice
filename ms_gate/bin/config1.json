@@ -3,5 +3,19 @@
   "service": "ServiceGate",
   "port": 8887,
   "logLevel": "DEBUG",
-  "etcd": ["10.246.13.142:2379"]
+  "etcd": ["127.0.0.1:2379"],
+  "dbCfg": 
+  [
+        {
+            "name": "myRedis1",
+            "type": "redisSingle",
+            "addr": ["127.0.0.1:6379"]
+        },
+        {
+            "name": "myRedis2",
+            "type": "redisCluster",
+            "addr": ["127.0.0.1:7000"]
+        }
+  ]
+
 }

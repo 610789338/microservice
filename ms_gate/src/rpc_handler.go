@@ -44,6 +44,35 @@ func (r *RpcC2GRpcRouteHandler) Process(session *msf.Session) {
      */
 
     msf.RpcFvcCount()
+
+    // 接口权限校验
+    if msf.GetServerIdentity() == msf.SERVER_IDENTITY_CLIENT_GATE && session.GetType() == msf.SessionTcpClient {
+
+        err := ""
+        rpcPermissions, ok := gClientAccess[fmt.Sprintf("%s:%s", r.req.NameSpace, r.req.Service)]
+        if !ok {
+            err = fmt.Sprintf("service %s:%s not exist", r.req.NameSpace, r.req.Service)
+        } else {
+
+            var rpcName string
+            decoder := msgpack.NewDecoder(bytes.NewBuffer(r.req.InnerRpc))
+            decoder.Decode(&rpcName)
+
+            access, ok := rpcPermissions[rpcName]
+            if !ok || !access {
+                err = fmt.Sprintf("rpc %s:%s:%s not allow", r.req.NameSpace, r.req.Service, rpcName)
+            }        
+        }
+        
+        if len(err) != 0 {    
+            // error response
+            msf.INFO_LOG("[rpc route] - [%s:%s] rid[%v] response[%v]", r.req.NameSpace, r.req.Service, r.req.Rid, err)
+            rpc := msf.RpcEncode(msf.MSG_G2C_RPC_RSP, r.req.Rid, err, nil)
+            msg := msf.MessageEncode(rpc)
+            msf.MessageSend(session.GetConn(), msg)
+            return
+        }
+    }
     
     remoteID := msf.GetRemoteID(r.req.NameSpace, r.req.Service)
     remote := msf.ChoiceRemote(remoteID)
@@ -91,11 +120,11 @@ func (r *RpcC2GRpcRouteHandler) Process(session *msf.Session) {
 
     } else {
         
-        error := fmt.Sprintf("service %s:%s not exist", r.req.NameSpace, r.req.Service)
-        msf.INFO_LOG("[rpc route] - [%s:%s] rid[%v] response[%v]", r.req.NameSpace, r.req.Service, r.req.Rid, error)
+        err := fmt.Sprintf("service %s:%s not exist", r.req.NameSpace, r.req.Service)
+        msf.INFO_LOG("[rpc route] - [%s:%s] rid[%v] response[%v]", r.req.NameSpace, r.req.Service, r.req.Rid, err)
 
         // error response
-        rpc := msf.RpcEncode(msf.MSG_G2C_RPC_RSP, r.req.Rid, error, nil)
+        rpc := msf.RpcEncode(msf.MSG_G2C_RPC_RSP, r.req.Rid, err, nil)
         msg := msf.MessageEncode(rpc)
         msf.MessageSend(session.GetConn(), msg)
     }
@@ -296,13 +325,31 @@ func (r *RpcC2GVertifyHandler) Process(session *msf.Session) {
     }
 
     connID := msf.GetConnID(session.GetConn())
-    tcpClient := msf.GetTcpClient(connID)
-    if nil == tcpClient {
+    client := msf.GetTcpClient(connID)
+    if nil == client {
         msf.ERROR_LOG("[c2g vertify] tcp client %s not exist", connID)
         return
     }
 
     msf.INFO_LOG("[c2g vertify] tcp client %s vertify %s success", connID, r.req.SecretKey)
-    tcpClient.SetState(msf.TcpClientState_OK)
+    client.SetState(msf.TcpClientState_OK)
 }
 
+
+// MSG_S2G_RPC_ACCESS_REPORT
+type RpcC2GRpcAccessReportReq struct {
+    ServiceKey      string
+    Access          map[string]bool
+}
+
+type RpcC2GRpcAccessReportHandler struct {
+    req         RpcC2GRpcAccessReportReq
+}
+
+func (r *RpcC2GRpcAccessReportHandler) GetReqPtr() interface{} {return &(r.req)}
+func (r *RpcC2GRpcAccessReportHandler) GetRspPtr() interface{} {return nil}
+
+func (r *RpcC2GRpcAccessReportHandler) Process(session *msf.Session) {
+    gClientAccess[r.req.ServiceKey] = r.req.Access
+    msf.DEBUG_LOG("[c2g rpc access report] %s: %+v", r.req.ServiceKey, r.req.Access)
+}

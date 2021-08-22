@@ -1,5 +1,4 @@
 {
-  "namespace": "YJ",
   "service": "ServiceGate",
   "port": 8887,
   "logLevel": "DEBUG",

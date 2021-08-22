@@ -45,7 +45,7 @@ func (c *Client) StartTest(mode string, idx int) {
         panic("gate is nil~~~")
     }
 
-    c.gate.Login(fmt.Sprintf("client%d", idx))
+    c.gate.Login(fmt.Sprintf("client%d", idx), namespace)
 
     msf.INFO_LOG("client start %v", c.gate.LocalAddr())
     c.fvc = msf.FlowVelocityCounter{Counter: "client rtt"}
@@ -96,7 +96,7 @@ func (c *Client) StartPushTest(idx int) {
         panic("gate is nil~~~")
     }
 
-    c.gate.Login(fmt.Sprintf("client%d", idx))
+    c.gate.Login(fmt.Sprintf("client%d", idx), namespace)
 
     msf.INFO_LOG("client start %v", c.gate.LocalAddr())
 

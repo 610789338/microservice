@@ -82,16 +82,13 @@ func (r *RpcC2GRpcRouteHandler) Process(session *msf.Session) {
 
     if remote != nil {
 
+        var rpcName string
+        decoder := msgpack.NewDecoder(bytes.NewBuffer(r.req.InnerRpc))
+        decoder.Decode(&rpcName)
+
         grid := uint32(0)
         if r.req.Rid != 0 {
             grid = msf.GenGid()
-        }
-
-        if r.req.Rid != 0 {
-
-            var rpcName string
-            decoder := msgpack.NewDecoder(bytes.NewBuffer(r.req.InnerRpc))
-            decoder.Decode(&rpcName)
 
             cbInfo := C2GRouteCbInfo {
                 rid: r.req.Rid, 
@@ -102,20 +99,12 @@ func (r *RpcC2GRpcRouteHandler) Process(session *msf.Session) {
                 createTime: msf.GetNowTimestampMs(),
             }
 
-            // timeoutCb := func() {
-            //     error := fmt.Sprintf("rpc call %s:%s:%s gate time out", r.req.NameSpace, r.req.Service, rpcName)
-            //     INFO_LOG("[rpc route] - [%s:%s] rid[%v] response[%v]", r.req.NameSpace, r.req.Service, r.req.Rid, error)
-
-            //     rpc := rpcMgr.RpcEncode(MSG_G2C_RPC_RSP, r.req.Rid, error, nil)
-            //     msg := rpcMgr.MessageEncode(rpc)
-            //     MessageSend(session.conn, msg)
-            // }
-
             // 超时时间最好大于client cb的超时时间
             msf.AddCallBack(grid, []interface{}{cbInfo}, 101, nil)
-        }
+        } else {
 
-        // msf.DEBUG_LOG("[RpcC2GRpcRouteHandler] - SERVICE - [%s:%s] rid[%v] grid[%v]", r.req.NameSpace, r.req.Service, r.req.Rid, grid)
+            msf.INFO_LOG("[rpc route] - [%s:%s:%s] rid[%v] no response", r.req.NameSpace, r.req.Service, rpcName, r.req.Rid)
+        }
 
         rpc := msf.RpcEncode(msf.MSG_G2S_RPC_CALL, grid, r.req.InnerRpc)
         msg := msf.MessageEncode(rpc)
@@ -124,7 +113,7 @@ func (r *RpcC2GRpcRouteHandler) Process(session *msf.Session) {
     } else {
         
         err := fmt.Sprintf("service %s:%s not exist", r.req.NameSpace, r.req.Service)
-        msf.INFO_LOG("[rpc route] - [%s:%s] rid[%v] response[%v]", r.req.NameSpace, r.req.Service, r.req.Rid, err)
+        msf.ERROR_LOG("[rpc route] - [%s:%s] rid[%v] response[%v]", r.req.NameSpace, r.req.Service, r.req.Rid, err)
 
         if r.req.Rid != 0 {
             // error response
@@ -288,7 +277,8 @@ func (r *RpcReqListenAddrHandler) Process(session *msf.Session) {
 // MSG_P2G_PUSH
 type RpcP2GPushReq struct {
     ConnID        string
-    Rid           uint32
+    Pid           []byte
+    Namespace     string
     InnerRpc      []byte
 }
 
@@ -309,7 +299,7 @@ func (r *RpcP2GPushHandler) Process(session *msf.Session) {
 
     msf.DEBUG_LOG("[push2client] connID - %s client - %s", r.req.ConnID, client.RemoteAddr())
 
-    rpc := msf.RpcEncode(msf.MSG_G2C_PUSH, r.req.Rid, r.req.InnerRpc)
+    rpc := msf.RpcEncode(msf.MSG_G2C_PUSH, r.req.Pid, r.req.Namespace, r.req.InnerRpc)
     msg := msf.MessageEncode(rpc)
     msf.MessageSend(client.GetConn(), msg)
 }
@@ -346,19 +336,19 @@ func (r *RpcC2GVertifyHandler) Process(session *msf.Session) {
 
 
 // MSG_S2G_RPC_ACCESS_REPORT
-type RpcC2GRpcAccessReportReq struct {
+type RpcS2GRpcAccessReportReq struct {
     ServiceKey      string
     Access          map[string]bool
 }
 
-type RpcC2GRpcAccessReportHandler struct {
-    req         RpcC2GRpcAccessReportReq
+type RpcS2GRpcAccessReportHandler struct {
+    req         RpcS2GRpcAccessReportReq
 }
 
-func (r *RpcC2GRpcAccessReportHandler) GetReqPtr() interface{} {return &(r.req)}
-func (r *RpcC2GRpcAccessReportHandler) GetRspPtr() interface{} {return nil}
+func (r *RpcS2GRpcAccessReportHandler) GetReqPtr() interface{} {return &(r.req)}
+func (r *RpcS2GRpcAccessReportHandler) GetRspPtr() interface{} {return nil}
 
-func (r *RpcC2GRpcAccessReportHandler) Process(session *msf.Session) {
+func (r *RpcS2GRpcAccessReportHandler) Process(session *msf.Session) {
     gClientAccess[r.req.ServiceKey] = r.req.Access
-    msf.DEBUG_LOG("[c2g rpc access report] %s: %+v", r.req.ServiceKey, r.req.Access)
+    msf.DEBUG_LOG("[s2g rpc access report] %s: %+v", r.req.ServiceKey, r.req.Access)
 }

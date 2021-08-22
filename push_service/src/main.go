@@ -20,8 +20,10 @@ func main() {
     
     msf.Init()
 
-    msf.RegistRpcHandler(msf.MSG_S2P_PUSH,                  func() msf.RpcHandler {return new(RpcS2PPushHandler)})
     msf.RegistRpcHandler(msf.MSG_G2P_RSP_LISTENADDR,        func() msf.RpcHandler {return new(RpcRspListenAddrHandler)})
+    msf.RegistRpcHandler(msf.MSG_S2P_PUSH,                  func() msf.RpcHandler {return new(RpcS2PPushHandler)})
+    msf.RegistRpcHandler(msf.MSG_PUSH_REPLY,                func() msf.RpcHandler {return new(RpcPushReplyHandler)})
+    msf.RegistRpcHandler(msf.MSG_PUSH_RESTORE,              func() msf.RpcHandler {return new(RpcPushRestoreHandler)})
 
     msf.SetBusOnTcpAccept(onTcpAccept)
 

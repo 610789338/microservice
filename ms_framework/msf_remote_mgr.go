@@ -129,9 +129,17 @@ func (r *Remote) HandleRead() {
                 // WARN_LOG("read timeout %v", err)
 
                 now := GetNowTimestampMs()
-                if now - r.lastActiveTime > 20*1000 {
-                    ERROR_LOG("remote %v connect timeout %d", r.conn.RemoteAddr(), (r.lastActiveTime - now)/1000)
-                    break
+                if now - r.lastActiveTime > 10*1000 {
+
+                    if now - r.lastActiveTime > 20*1000 {
+                        ERROR_LOG("remote %v connect timeout %d", r.conn.RemoteAddr(), (now - r.lastActiveTime)/1000)
+                        break
+                    }
+
+                    // heart beat
+                    if !r.HeartBeat() {
+                        break
+                    }
                 }
                 continue
             }
@@ -186,6 +194,21 @@ func (r *Remote) Turn2Session() *Session {
 
 func (r *Remote) GetConn() net.Conn {
     return r.conn
+}
+
+func (r *Remote) HeartBeat() bool {
+
+    rpc := rpcMgr.RpcEncode(MSG_HEART_BEAT_REQ)
+    msg := rpcMgr.MessageEncode(rpc)
+    if !MessageSend(r.conn, msg) {
+        return false
+    }
+
+    return true
+}
+
+func (r *Remote) SetLastActiveTime() {
+    r.lastActiveTime = GetNowTimestampMs()
 }
 
 var remoteMgr *RemoteMgr = nil

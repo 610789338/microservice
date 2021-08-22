@@ -4,7 +4,7 @@ import (
     "net"
     "fmt"
     msf "ms_framework"
-    // "time"
+    "time"
     "io"
     "reflect"
     // "sync"
@@ -69,8 +69,15 @@ func (g *GateProxy) HandleRead() {
     }
 }
 
-func (g *GateProxy) Login(clientID string) {
+func (g *GateProxy) Login(clientID string, namespace string) {
     g.RpcCall(msf.MSG_GATE_LOGIN, clientID)
+    time.Sleep(time.Millisecond*500)
+
+    // TODO，暂时用sleep保序，后续改成严谨的保序方案
+    innerRpc := msf.GetRpcMgr().RpcEncode(msf.MSG_PUSH_RESTORE, clientID)
+    rpc := msf.GetRpcMgr().RpcEncode(msf.MSG_C2G_RPC_ROUTE, namespace, "PushService", 0, innerRpc)
+    msg := msf.GetRpcMgr().MessageEncode(rpc)
+    msf.MessageSend(g.conn, msg)
 }
 
 func (g *GateProxy) Logoff(clientID string) {
@@ -126,7 +133,7 @@ type ServiceProxy struct {
 }
 
 // c2s的rpc调用，最后一个参数若是CallBack，则建立rid<->callback的缓存
-func (g *ServiceProxy) RpcCall(rpcName string, args ...interface{}) {
+func (sp *ServiceProxy) RpcCall(rpcName string, args ...interface{}) {
 
     var rid uint32 = 0
     if len(args) > 0 {
@@ -140,7 +147,7 @@ func (g *ServiceProxy) RpcCall(rpcName string, args ...interface{}) {
                 rid = msf.GenGid()
 
                 timeoutCb := func() {
-                    error := fmt.Sprintf("rpc call %s:%s:%s time out", g.Namespace, g.ServiceName, rpcName)
+                    error := fmt.Sprintf("rpc call %s:%s:%s time out", sp.Namespace, sp.ServiceName, rpcName)
                     lastArg.(CallBack)(error, nil)
                 }
 
@@ -152,7 +159,7 @@ func (g *ServiceProxy) RpcCall(rpcName string, args ...interface{}) {
     // msf.DEBUG_LOG("rpc call %s args %v rid %d", rpcName, args, rid)
 
     innerRpc := msf.GetRpcMgr().RpcEncode(rpcName, args...)
-    g.Gp.RpcCall(msf.MSG_C2G_RPC_ROUTE, g.Namespace, g.ServiceName, rid, innerRpc)
+    sp.Gp.RpcCall(msf.MSG_C2G_RPC_ROUTE, sp.Namespace, sp.ServiceName, rid, innerRpc)
 }
 
 // MSG_G2C_RPC_RSP
@@ -185,7 +192,8 @@ func (r *RpcG2CRpcRspHandler) Process(session *msf.Session) {
 
 // MSG_G2C_PUSH
 type RpcG2CPushReq struct {
-    Rid             uint32
+    Pid             []byte
+    Namespace       string
     InnerRpc        []byte
 }
 
@@ -227,8 +235,11 @@ func (r *RpcG2CPushHandler) Process(session *msf.Session) {
 
     handler.Process(session)
 
-    if r.req.Rid != 0 {
-        // TODO
+    if len(r.req.Pid) != 0 {
+        innerRpc := msf.GetRpcMgr().RpcEncode(msf.MSG_PUSH_REPLY, r.req.Pid)
+        rpc := msf.GetRpcMgr().RpcEncode(msf.MSG_C2G_RPC_ROUTE, r.req.Namespace, "PushService", 0, innerRpc)
+        msg := msf.GetRpcMgr().MessageEncode(rpc)
+        msf.MessageSend(session.GetConn(), msg)
     }
 }
 

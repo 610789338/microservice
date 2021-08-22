@@ -138,6 +138,7 @@ func (rmgr *SimpleRpcMgr) MessageDecode(session *Session, msg []byte) uint32 {
             buf := make([]byte, pkgLen)
             copy(buf, msg[offset: offset + pkgLen])
 
+            // TODO，把这段逻辑移到tcp server的HandlerRead中，同步执行MSG_C2G_VERTIFY和MSG_GATE_LOGIN
             // client gate对client的校验
             if GetServerIdentity() == SERVER_IDENTITY_CLIENT_GATE {
 
@@ -356,9 +357,9 @@ func PushUnsafe(clientID string, tpe string, rpcName string, args ...interface{}
 }
 
 func PushSafe(clientID string, tpe string, rpcName string, args ...interface{}) {
-    rpc := rpcMgr.RpcEncode(rpcName, args...)
-    msg := rpcMgr.MessageEncode(rpc)
-    RpcCallAsync("PushService", MSG_S2P_PUSH, clientID, tpe, true, msg)
+    innerRpc := rpcMgr.RpcEncode(rpcName, args...)
+    // msg := rpcMgr.MessageEncode(innerRpc)
+    RpcCallAsync("PushService", MSG_S2P_PUSH, clientID, tpe, true, innerRpc)
 }
 
 func PushServerUnsafe(clientID string, rpcName string, args ...interface{}) {

@@ -16,6 +16,8 @@ var MSG_G2C_RPC_RSP             = "d"  // gate to client rpc response
 var MSG_HEART_BEAT_REQ          = "e"  // heart beat request
 var MSG_HEART_BEAT_RSP          = "f"  // heart beat response
 
+var MSG_C2G_VERTIFY             = "g"  // client to gate vertify
+
 var MSG_GATE_LOGIN              = "h"  // client login from gate
 var MSG_GATE_LOGOFF             = "i"  // client logoff from gate
 
@@ -24,10 +26,11 @@ var MSG_G2P_RSP_LISTENADDR      = "k"  // gate service to push response listen a
 
 var MSG_S2P_PUSH                = "l"  // service to push service
 var MSG_P2G_PUSH                = "m"  // push service to gate
-var MSG_G2C_PUSH                = "n"  // gate to client
+var MSG_G2C_PUSH                = "n"  // gate push to client
+var MSG_PUSH_REPLY              = "o"  // push reply (for safe push)
+var MSG_PUSH_RESTORE            = "p"  // push record restore (when client login)
 
-var MSG_C2G_VERTIFY             = "g"  // client to gate vertify
-var MSG_S2G_RPC_ACCESS_REPORT   = "o"  // service to gate rpc access report
+var MSG_S2G_RPC_ACCESS_REPORT   = "r"  // service to gate rpc access report
 
 
 

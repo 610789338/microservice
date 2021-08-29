@@ -120,7 +120,7 @@ func main() {
             switch os.Args[idx] {
             case "--help":
                 idx++
-                Useage()
+                Usage()
 
             case "-h":
                 idx++
@@ -153,7 +153,7 @@ func main() {
             }
         }
     } else {
-        Useage()
+        Usage()
     }
 
     msf.INFO_LOG("client %s mode cnt %v, test cnt %v", mode, clientCnt, testCnt)
@@ -174,10 +174,10 @@ func main() {
     <- ch
 }
 
-func Useage() {
+func Usage() {
 
     fmt.Printf("\n")
-    fmt.Printf("--help:    print Useage\n")
+    fmt.Printf("--help:    print Usage\n")
     fmt.Printf(fmt.Sprintf("-h    :    gate listen addr, default %s\n", IP))
     fmt.Printf(fmt.Sprintf("-p    :    gate listen port, default %d\n", Port))
     fmt.Printf("-m    :    test mode, must in [testa, testb, dbtest, pushtest]\n")

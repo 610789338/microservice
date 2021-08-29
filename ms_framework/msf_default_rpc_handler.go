@@ -5,6 +5,7 @@ import (
     "github.com/vmihailenco/msgpack"
     "bytes"
     "reflect"
+    "runtime"
 )
 
 
@@ -51,7 +52,7 @@ func (r *RpcG2SRpcCallHandler) Process(session *Session) {
     
     RpcFvcCount()
     
-    error, reply := r.rpc_handler(session)
+    error, reply := r.rpcHandle(session)
 
     if r.req.GRid != 0 {
 
@@ -66,7 +67,7 @@ func (r *RpcG2SRpcCallHandler) Process(session *Session) {
     }
 }
 
-func (r *RpcG2SRpcCallHandler) rpc_handler(session *Session) (string, map[string]interface{}){
+func (r *RpcG2SRpcCallHandler) rpcHandle(session *Session) (string, map[string]interface{}){
 
     decoder := msgpack.NewDecoder(bytes.NewBuffer(r.req.InnerRpc))
 
@@ -92,7 +93,7 @@ func (r *RpcG2SRpcCallHandler) rpc_handler(session *Session) (string, map[string
         }
     }
 
-    handler.Process(session)
+    r.doProcessWithPanicProtect(handler, session)
 
     if r.req.GRid != 0 {
         rspPtr := reflect.ValueOf(handler.GetRspPtr())
@@ -114,6 +115,25 @@ func (r *RpcG2SRpcCallHandler) rpc_handler(session *Session) (string, map[string
 
     INFO_LOG("[rpc call] - [%s] args[%v] reply[nil]", rpcName, handler.GetReqPtr())
     return "", nil
+}
+
+func (r *RpcG2SRpcCallHandler) doProcessWithPanicProtect(handler RpcHandler, session *Session) {
+    defer func() {
+        panicMsg := ""
+        if err := recover(); err != nil {
+            panicMsg = fmt.Sprint(err);
+        }
+
+        if len(panicMsg) != 0 {
+            buf := make([]byte, 2048)
+            n := runtime.Stack(buf, false)
+            stackInfo := fmt.Sprintf("%s", buf[:n])
+            ERROR_LOG(panicMsg)
+            ERROR_LOG("panic stack info %s", stackInfo)
+        }
+    }()
+
+    handler.Process(session)
 }
 
 // MSG_G2C_RPC_RSP

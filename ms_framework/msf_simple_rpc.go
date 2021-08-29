@@ -12,7 +12,6 @@ import (
 const (
     SessionTcpClient int8 = iota
     SessionRemote
-    SessionGateProxy
 )
 
 type Session struct {
@@ -113,6 +112,36 @@ func (rmgr *SimpleRpcMgr) GenClientAccess(name string, gen RpcHanderGenerator) {
     }
 }
 
+func (rmgr *SimpleRpcMgr) PreCheck(session *Session, rpcName string) bool {
+
+    if rpcName == MSG_C2G_VERTIFY {
+        return true
+    }
+
+    if session.typ != SessionTcpClient {
+        return true
+    }
+
+    tcpClient := GetTcpClient(GetConnID(session.conn))
+    if tcpClient.state != TcpClientState_OK {
+        // 状态不对，断开连接
+        ERROR_LOG("illegal tcp client %s, rpc - %s", GetConnID(session.conn), rpcName)
+        tcpClient.SetState(TcpClientState_EXIT)
+        return false
+    }
+
+    return true
+}
+
+
+func (rmgr *SimpleRpcMgr) IsSync(rpcName string) bool {
+    if rpcName == MSG_C2G_VERTIFY || rpcName == MSG_GATE_LOGIN {
+        return true
+    }
+
+    return false
+}
+
 func (rmgr *SimpleRpcMgr) MessageDecode(session *Session, msg []byte) uint32 {
     var offset uint32 = 0
 
@@ -138,33 +167,18 @@ func (rmgr *SimpleRpcMgr) MessageDecode(session *Session, msg []byte) uint32 {
             buf := make([]byte, pkgLen)
             copy(buf, msg[offset: offset + pkgLen])
 
-            // TODO，把这段逻辑移到tcp server的HandlerRead中，同步执行MSG_C2G_VERTIFY和MSG_GATE_LOGIN
-            // client gate对client的校验
-            if GetServerIdentity() == SERVER_IDENTITY_CLIENT_GATE {
-
-                tcpClient := GetTcpClient(GetConnID(session.conn))
-                if tcpClient != nil && tcpClient.state != TcpClientState_OK {
-
-                    decoder := msgpack.NewDecoder(bytes.NewBuffer(buf))
-                    var rpcName string
-                    decoder.Decode(&rpcName)
-                    if rpcName == MSG_C2G_VERTIFY {
-                        // MSG_C2G_VERTIFY同步执行
-                        gTaskPool.ProduceTask(session, buf)
-
-                    } else {
-
-                        // 第一条不是MSG_C2G_VERTIFY则断开连接
-                        ERROR_LOG("illegal tcp client %s, rpc - %s", GetConnID(session.conn), rpcName)
-                        tcpClient.SetState(TcpClientState_EXIT)
-                    }
-
-                    offset += pkgLen
-                    continue
-                }
+            decoder := msgpack.NewDecoder(bytes.NewBuffer(buf))
+            var rpcName string
+            decoder.Decode(&rpcName)
+            if !rmgr.PreCheck(session, rpcName) {
+                continue
             }
 
-            go gTaskPool.ProduceTask(session, buf)
+            if rmgr.IsSync(rpcName) {
+                gTaskPool.ProduceTask(session, buf)
+            } else {
+                go gTaskPool.ProduceTask(session, buf)
+            }
         }
 
         offset += pkgLen

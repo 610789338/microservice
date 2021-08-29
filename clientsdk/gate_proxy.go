@@ -4,7 +4,6 @@ import (
     "net"
     "fmt"
     msf "ms_framework"
-    "time"
     "io"
     "reflect"
     // "sync"
@@ -71,9 +70,7 @@ func (g *GateProxy) HandleRead() {
 
 func (g *GateProxy) Login(clientID string, namespace string) {
     g.RpcCall(msf.MSG_GATE_LOGIN, clientID)
-    time.Sleep(time.Millisecond*500)
 
-    // TODO，暂时用sleep保序，后续改成严谨的保序方案
     innerRpc := msf.GetRpcMgr().RpcEncode(msf.MSG_PUSH_RESTORE, clientID)
     rpc := msf.GetRpcMgr().RpcEncode(msf.MSG_C2G_RPC_ROUTE, namespace, "PushService", 0, innerRpc)
     msg := msf.GetRpcMgr().MessageEncode(rpc)
@@ -91,7 +88,7 @@ func (g *GateProxy) RpcCall(rpcName string, args ...interface{}) {
 }
 
 func (g *GateProxy) Turn2Session() *msf.Session {
-    return msf.CreateSession(msf.SessionTcpClient, g.conn)
+    return msf.CreateSession(msf.SessionRemote, g.conn)
 }
 
 func (g *GateProxy) LocalAddr() string {

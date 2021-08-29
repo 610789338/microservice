@@ -72,7 +72,7 @@ func (g *GateProxy) Login(clientID string, namespace string) {
     g.RpcCall(msf.MSG_GATE_LOGIN, clientID)
 
     innerRpc := msf.GetRpcMgr().RpcEncode(msf.MSG_PUSH_RESTORE, clientID)
-    rpc := msf.GetRpcMgr().RpcEncode(msf.MSG_C2G_RPC_ROUTE, namespace, "PushService", 0, innerRpc)
+    rpc := msf.GetRpcMgr().RpcEncode(msf.MSG_C2G_RPC_ROUTE, namespace, "PushService", 0, false, innerRpc)
     msg := msf.GetRpcMgr().MessageEncode(rpc)
     msf.MessageSend(g.conn, msg)
 }
@@ -155,8 +155,9 @@ func (sp *ServiceProxy) RpcCall(rpcName string, args ...interface{}) {
 
     // msf.DEBUG_LOG("rpc call %s args %v rid %d", rpcName, args, rid)
 
+    // TODO: 这个接口再封装一下
     innerRpc := msf.GetRpcMgr().RpcEncode(rpcName, args...)
-    sp.Gp.RpcCall(msf.MSG_C2G_RPC_ROUTE, sp.Namespace, sp.ServiceName, rid, innerRpc)
+    sp.Gp.RpcCall(msf.MSG_C2G_RPC_ROUTE, sp.Namespace, sp.ServiceName, rid, true, innerRpc)
 }
 
 // MSG_G2C_RPC_RSP
@@ -234,7 +235,7 @@ func (r *RpcG2CPushHandler) Process(session *msf.Session) {
 
     if len(r.req.Pid) != 0 {
         innerRpc := msf.GetRpcMgr().RpcEncode(msf.MSG_PUSH_REPLY, r.req.Pid)
-        rpc := msf.GetRpcMgr().RpcEncode(msf.MSG_C2G_RPC_ROUTE, r.req.Namespace, "PushService", 0, innerRpc)
+        rpc := msf.GetRpcMgr().RpcEncode(msf.MSG_C2G_RPC_ROUTE, r.req.Namespace, "PushService", 0, false, innerRpc)
         msg := msf.GetRpcMgr().MessageEncode(rpc)
         msf.MessageSend(session.GetConn(), msg)
     }

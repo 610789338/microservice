@@ -18,6 +18,7 @@ type REMOTE_ID string  // namespace:service
 type RemoteMgr struct {
     remotes          map[CONN_ID]*Remote
     lbs              map[REMOTE_ID]*LoadBalancer
+    orderedCache     map[CONN_ID]map[REMOTE_ID]CONN_ID  // client connID: {remoteID: remote connID}
     mutex            sync.RWMutex
 }
 
@@ -215,8 +216,9 @@ var remoteMgr *RemoteMgr = nil
 
 func CreateRemoteMgr() {
     remoteMgr = &RemoteMgr{
-        remotes: make(map[CONN_ID]*Remote),
-        lbs:     make(map[REMOTE_ID]*LoadBalancer),
+        remotes:        make(map[CONN_ID]*Remote),
+        lbs:            make(map[REMOTE_ID]*LoadBalancer),
+        orderedCache:   make(map[CONN_ID]map[REMOTE_ID]CONN_ID),
     }
 }
 
@@ -224,19 +226,63 @@ func GetRemoteID(namespace string, svrName string) REMOTE_ID {
     return REMOTE_ID(fmt.Sprintf("%s:%s", namespace, svrName))
 }
 
-func ChoiceRemote(remoteID REMOTE_ID) *Remote {
+func ChoiceRemote(remoteID REMOTE_ID, isOrdered bool, clientID CONN_ID) *Remote {
+    if isOrdered {
+        remote := ChioceRemoteFromOrderCache(remoteID, clientID)
+        if remote != nil {
+            return remote
+        }
+    }
+
     lbs, ok := remoteMgr.lbs[remoteID]
     if !ok {
         return nil
     }
 
     connID := CONN_ID(lbs.LoadBalance())
+    remote := GetRemote(connID)
+    if isOrdered && remote != nil {
+        UpdateRemoteOrderCache(remoteID, clientID, connID)
+    }
+
+    return remote
+}
+
+func ChioceRemoteFromOrderCache(remoteID REMOTE_ID, clientID CONN_ID) *Remote {
+    remoteMgr.mutex.RLock()
+    defer remoteMgr.mutex.RUnlock()
+
+    cache, ok := remoteMgr.orderedCache[clientID]
+    if !ok {
+        return nil
+    }
+
+
+    connID, ok := cache[remoteID]
+    if !ok {
+        return nil
+    }
+
     remote, ok := remoteMgr.remotes[connID]
     if !ok {
         return nil
     }
 
     return remote
+}
+
+func UpdateRemoteOrderCache(remoteID REMOTE_ID, clientID CONN_ID, connID CONN_ID) {
+    remoteMgr.mutex.Lock()
+    defer remoteMgr.mutex.Unlock()
+
+    // TODO: orderedCache size管理
+    cache, ok := remoteMgr.orderedCache[clientID]
+    if !ok {
+        cache = make(map[REMOTE_ID]CONN_ID)
+        remoteMgr.orderedCache[clientID] = cache
+    }
+
+    cache[remoteID] = connID
 }
 
 func GetRemote(connID CONN_ID) *Remote {

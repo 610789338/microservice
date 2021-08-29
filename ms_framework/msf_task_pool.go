@@ -47,11 +47,10 @@ func (t *TaskPool) Monitor() {
     }
 }
 
-func (t *TaskPool) ProduceTask(session *Session, buf []byte) {
+func (t *TaskPool) ProduceTask(task func()) {
     t.opCh <- "add"
     defer func() {t.opCh <- "del"} ()
-
-    rpcMgr.RpcDecode(session, buf)
+    task()
 }
 
 func (t *TaskPool) Size() int {

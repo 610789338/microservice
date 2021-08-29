@@ -24,6 +24,7 @@ type RpcC2GRpcRouteReq struct {
     NameSpace       string
     Service         string
     Rid             uint32
+    IsOrdered       bool
     InnerRpc        []byte
 }
 
@@ -77,8 +78,9 @@ func (r *RpcC2GRpcRouteHandler) Process(session *msf.Session) {
         }
     }
     
+    clientID := msf.GetConnID(session.GetConn())
     remoteID := msf.GetRemoteID(r.req.NameSpace, r.req.Service)
-    remote := msf.ChoiceRemote(remoteID)
+    remote := msf.ChoiceRemote(remoteID, r.req.IsOrdered, clientID)
 
     if remote != nil {
 
@@ -92,7 +94,7 @@ func (r *RpcC2GRpcRouteHandler) Process(session *msf.Session) {
 
             cbInfo := C2GRouteCbInfo {
                 rid: r.req.Rid, 
-                connID: msf.GetConnID(session.GetConn()), 
+                connID: clientID, 
                 nameSpace: r.req.NameSpace, 
                 service: r.req.Service, 
                 rpcName: rpcName, 
@@ -106,7 +108,12 @@ func (r *RpcC2GRpcRouteHandler) Process(session *msf.Session) {
             msf.INFO_LOG("[rpc route] - [%s:%s:%s] rid[%v] no response", r.req.NameSpace, r.req.Service, rpcName, r.req.Rid)
         }
 
-        rpc := msf.RpcEncode(msf.MSG_G2S_RPC_CALL, grid, r.req.InnerRpc)
+        var rpc []byte
+        if r.req.IsOrdered {
+            rpc = msf.RpcEncode(msf.MSG_G2S_RPC_CALL_ORDERED, grid, r.req.InnerRpc)
+        } else {
+            rpc = msf.RpcEncode(msf.MSG_G2S_RPC_CALL, grid, r.req.InnerRpc)
+        }
         msg := msf.MessageEncode(rpc)
         msf.MessageSend(remote.GetConn(), msg)
 

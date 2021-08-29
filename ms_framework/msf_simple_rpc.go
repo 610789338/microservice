@@ -42,23 +42,16 @@ func GetResponseErr(session *Session) string {
 
 
 var MAX_PACKET_SIZE uint32 = 16*1024  // 16K
-var MESSAGE_SIZE_LEN uint32 = 4
-var RID_LEN uint32 = 4
+var MESSAGE_SIZE_LEN uint32 = 2
 
 func ReadPacketLen(buf []byte) uint32 {
-    return ReadUint32(buf)
+    // return ReadUint32(buf)
+    return uint32(ReadUint16(buf))
 }
 
 func WritePacketLen(buf []byte, v uint32) {
-    WriteUint32(buf, v)
-}
-
-func ReadRid(buf []byte) uint32 {
-    return ReadUint32(buf)
-}
-
-func WriteRid(buf []byte, v uint32) {
-    WriteUint32(buf, v)
+    // WriteUint32(buf, v)
+    WriteUint16(buf, uint16(v))
 }
 
 type RpcHandler interface {
@@ -112,36 +105,6 @@ func (rmgr *SimpleRpcMgr) GenClientAccess(name string, gen RpcHanderGenerator) {
     }
 }
 
-func (rmgr *SimpleRpcMgr) PreCheck(session *Session, rpcName string) bool {
-
-    if rpcName == MSG_C2G_VERTIFY {
-        return true
-    }
-
-    if session.typ != SessionTcpClient {
-        return true
-    }
-
-    tcpClient := GetTcpClient(GetConnID(session.conn))
-    if tcpClient.state != TcpClientState_OK {
-        // 状态不对，断开连接
-        ERROR_LOG("illegal tcp client %s, rpc - %s", GetConnID(session.conn), rpcName)
-        tcpClient.SetState(TcpClientState_EXIT)
-        return false
-    }
-
-    return true
-}
-
-
-func (rmgr *SimpleRpcMgr) IsSync(rpcName string) bool {
-    if rpcName == MSG_C2G_VERTIFY || rpcName == MSG_GATE_LOGIN {
-        return true
-    }
-
-    return false
-}
-
 func (rmgr *SimpleRpcMgr) MessageDecode(session *Session, msg []byte) uint32 {
     var offset uint32 = 0
 
@@ -166,19 +129,7 @@ func (rmgr *SimpleRpcMgr) MessageDecode(session *Session, msg []byte) uint32 {
         } else {
             buf := make([]byte, pkgLen)
             copy(buf, msg[offset: offset + pkgLen])
-
-            decoder := msgpack.NewDecoder(bytes.NewBuffer(buf))
-            var rpcName string
-            decoder.Decode(&rpcName)
-            if !rmgr.PreCheck(session, rpcName) {
-                continue
-            }
-
-            if rmgr.IsSync(rpcName) {
-                gTaskPool.ProduceTask(session, buf)
-            } else {
-                go gTaskPool.ProduceTask(session, buf)
-            }
+            rmgr.RpcDecode(session, buf)
         }
 
         offset += pkgLen
@@ -194,33 +145,79 @@ func (rmgr *SimpleRpcMgr) RpcDecode(session *Session, buf []byte) {
     var rpcName string
     decoder.Decode(&rpcName)
 
-    handlerGen, ok := rmgr.GetRpcHanderGenerator(rpcName)
-    if !ok {
-        ERROR_LOG("rpc %s not exist", rpcName)
+    task := func() {
+        handlerGen, ok := rmgr.GetRpcHanderGenerator(rpcName)
+        if !ok {
+            ERROR_LOG("rpc %s not exist", rpcName)
+            return
+        }
+
+        handler := handlerGen()
+        if handler.GetReqPtr() != nil {
+            reqPtr := reflect.ValueOf(handler.GetReqPtr())
+            stValue := reqPtr.Elem()
+            for i := 0; i < stValue.NumField(); i++ {
+                nv := reflect.New(stValue.Field(i).Type())
+                if err := decoder.Decode(nv.Interface()); err != nil {
+                    ERROR_LOG("rpc(%s) arg(%s-%v) decode error: %v", rpcName, stValue.Type().Field(i).Name, nv.Type(), err)
+                    return
+                }
+
+                stValue.Field(i).Set(nv.Elem())
+            }
+        }
+
+        handler.Process(session)
+    }
+
+    if !rmgr.PreCheck(session, rpcName) {
         return
     }
 
-    handler := handlerGen()
-    if handler.GetReqPtr() != nil {
-        reqPtr := reflect.ValueOf(handler.GetReqPtr())
-        stValue := reqPtr.Elem()
-        for i := 0; i < stValue.NumField(); i++ {
-            nv := reflect.New(stValue.Field(i).Type())
-            if err := decoder.Decode(nv.Interface()); err != nil {
-                ERROR_LOG("rpc(%s) arg(%s-%v) decode error: %v", rpcName, stValue.Type().Field(i).Name, nv.Type(), err)
-                return
-            }
+    if rmgr.IsSync(rpcName) {
+        // TODO: 这里有阻塞的风险，应该专门开一个协程来处理，而不是放在tcp接收协程中
+        gTaskPool.ProduceTask(task)
+    } else {
+        go gTaskPool.ProduceTask(task)
+    }
+}
 
-            stValue.Field(i).Set(nv.Elem())
-        }
+func (rmgr *SimpleRpcMgr) PreCheck(session *Session, rpcName string) bool {
+
+    if rpcName == MSG_C2G_VERTIFY {
+        return true
     }
 
-    handler.Process(session)
+    if session.typ != SessionTcpClient {
+        return true
+    }
+
+    tcpClient := GetTcpClient(GetConnID(session.conn))
+    if tcpClient.state != TcpClientState_OK {
+        // 状态不对，断开连接
+        ERROR_LOG("illegal tcp client %s, rpc - %s", GetConnID(session.conn), rpcName)
+        tcpClient.SetState(TcpClientState_EXIT)
+        return false
+    }
+
+    return true
+}
+
+
+func (rmgr *SimpleRpcMgr) IsSync(rpcName string) bool {
+    if rpcName == MSG_C2G_VERTIFY || rpcName == MSG_GATE_LOGIN || rpcName == MSG_G2S_RPC_CALL_ORDERED {
+        return true
+    }
+
+    return false
 }
 
 func (rmgr *SimpleRpcMgr) MessageEncode(buf []byte) []byte {
 
     bufLen := uint32(len(buf))
+    if bufLen > MAX_PACKET_SIZE {
+        panic(fmt.Sprintf("message len > %s", MAX_PACKET_SIZE))
+    }
     msg := make([]byte, MESSAGE_SIZE_LEN + bufLen)
     WritePacketLen(msg, bufLen)
     copy(msg[MESSAGE_SIZE_LEN:], buf)
@@ -263,6 +260,8 @@ func CreateSimpleRpcMgr() {
 
     // default handler
     rpcMgr.RegistRpcHandler(MSG_G2S_RPC_CALL,            func() RpcHandler {return new(RpcG2SRpcCallHandler)})      // for service
+    rpcMgr.RegistRpcHandler(MSG_G2S_RPC_CALL_ORDERED,    func() RpcHandler {return new(RpcG2SRpcCallHandler)})      // for service
+
     rpcMgr.RegistRpcHandler(MSG_G2C_RPC_RSP,             func() RpcHandler {return new(RpcG2CRpcRspHandler)})     // for client
 
 
@@ -297,7 +296,7 @@ type RpcCallTimeOutError struct {
 func RpcCall(serviceName string, rpcName string, rid uint32, reSendCnt int8, args ...interface{}) (err string, reply map[string]interface{}) {
 
     innerRpc := rpcMgr.RpcEncode(rpcName, args...)
-    rpc := rpcMgr.RpcEncode(MSG_C2G_RPC_ROUTE, GlobalCfg.Namespace, serviceName, rid, innerRpc)
+    rpc := rpcMgr.RpcEncode(MSG_C2G_RPC_ROUTE, GlobalCfg.Namespace, serviceName, rid, false, innerRpc)
     msg := rpcMgr.MessageEncode(rpc)
 
     var client *TcpClient = nil

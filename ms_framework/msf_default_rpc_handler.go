@@ -14,6 +14,9 @@ var MSG_G2S_RPC_CALL            = "b"  // gate to service rpc call
 var MSG_S2G_RPC_RSP             = "c"  // service to gate rpc response
 var MSG_G2C_RPC_RSP             = "d"  // gate to client rpc response
 
+
+var MSG_G2S_RPC_CALL_ORDERED    = "t"  // gate to service rpc call ordered
+
 var MSG_HEART_BEAT_REQ          = "e"  // heart beat request
 var MSG_HEART_BEAT_RSP          = "f"  // heart beat response
 

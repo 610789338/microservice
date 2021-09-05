@@ -66,7 +66,7 @@ func (r *RpcC2GRpcRouteHandler) Process(session *msf.Session) {
         }
         
         if len(err) != 0 {   
-            msf.INFO_LOG("[rpc route] - [%s:%s] rid[%v] response[%v]", r.req.NameSpace, r.req.Service, r.req.Rid, err)
+            msf.ERROR_LOG("[rpc route] - [%s:%s] rid[%v] response[%v]", r.req.NameSpace, r.req.Service, r.req.Rid, err)
 
             if r.req.Rid != 0 { 
                 // error response
@@ -105,7 +105,7 @@ func (r *RpcC2GRpcRouteHandler) Process(session *msf.Session) {
             msf.AddCallBack(grid, []interface{}{cbInfo}, 101, nil)
         } else {
 
-            msf.INFO_LOG("[rpc route] - [%s:%s:%s] rid[%v] no response", r.req.NameSpace, r.req.Service, rpcName, r.req.Rid)
+            msf.DEBUG_LOG("[rpc route] - [%s:%s:%s] rid[%v] no response", r.req.NameSpace, r.req.Service, rpcName, r.req.Rid)
         }
 
         var rpc []byte
@@ -169,7 +169,7 @@ func (r *RpcS2GRpcRspHandler) Process(session *msf.Session) {
         return
     }
 
-    msf.INFO_LOG("[rpc route] - [%s:%s:%s] rid[%v] err[%s] reply[%v] timeCost[%vms]", 
+    msf.DEBUG_LOG("[rpc route] - [%s:%s:%s] rid[%v] err[%s] reply[%v] timeCost[%vms]", 
         cbInfo.nameSpace, cbInfo.service, cbInfo.rpcName, rid, r.req.Error, r.req.Reply, msf.GetNowTimestampMs() - cbInfo.createTime)
 
     rpc := msf.RpcEncode(msf.MSG_G2C_RPC_RSP, rid, r.req.Error, r.req.Reply)

@@ -82,7 +82,7 @@ func (c *Client) StartTest(mode string, idx int) {
         }
 
         if c.interval != 0 {
-            time.Sleep(time.Millisecond * time.Duration(c.interval))
+            time.Sleep(time.Microsecond * time.Duration(c.interval))
         }
     }
 
@@ -224,7 +224,7 @@ func Usage() {
     fmt.Printf("-n    :    client cnt(goroutine), default 0\n")
     fmt.Printf("-t    :    rpc test cnt, default 0\n")
     fmt.Printf("-o    :    rpc test ordered, default false\n")
-    fmt.Printf("-i    :    rpc test interval(ms), default 0\n")
+    fmt.Printf("-i    :    rpc test interval(microsecond), default 0\n")
     fmt.Printf("-l    :    log level, default DEBUG\n")
 
     fmt.Printf("for example:\n")

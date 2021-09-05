@@ -1,7 +1,7 @@
 {
   "service": "ClientGate",
   "port": 8886,
-  "logLevel": "DEBUG",
+  "logLevel": "INFO",
   "etcd": ["127.0.0.1:2379"],
   "dbCfg": 
   [

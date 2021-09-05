@@ -36,7 +36,7 @@ func AddCallBack(cbid uint32, cbs []interface{}, waitTime int8, timeOutCb func()
     cbMutex.Unlock()
 
     // TODO：协程开多了会影响性能，可以考虑用排序链表来实现
-    go CallBackTimeOut(cbid, waitTime, timeOutCb)
+    // go CallBackTimeOut(cbid, waitTime, timeOutCb)
 }
 
 func GetCallBack(cbid uint32) []interface{} {

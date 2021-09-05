@@ -130,6 +130,7 @@ func main() {
     var clientCnt, testCnt, interval int = 0, 0, 0
     var ordered bool = false
     var err error
+    var logLevel = "DEBUG"
 
     if len(os.Args) > 1 {
         for idx := 1; idx < len(os.Args); idx++ {
@@ -183,13 +184,19 @@ func main() {
                 } else {
                     panic(fmt.Sprintf("-o %v error, must be true/false", os.Args[idx]))
                 }
+
+            case "-l":
+                idx++
+                logLevel = os.Args[idx]
             }
         }
     } else {
         Usage()
     }
 
-    msf.INFO_LOG("client %s mode cnt %v, test cnt %v, interval %v", mode, clientCnt, testCnt, interval)
+    msf.SetLogLevel(logLevel)
+
+    msf.INFO_LOG("client %s mode cnt %v, test cnt %v, interval %v, logLevel %v", mode, clientCnt, testCnt, interval, logLevel)
 
     if "pushtest" == mode  {
         for i := 0; i < clientCnt ; i++ {
@@ -217,7 +224,8 @@ func Usage() {
     fmt.Printf("-n    :    client cnt(goroutine), default 0\n")
     fmt.Printf("-t    :    rpc test cnt, default 0\n")
     fmt.Printf("-o    :    rpc test ordered, default false\n")
-    fmt.Printf("-i    :    rpc test interval(ms), default 0\n\n")
+    fmt.Printf("-i    :    rpc test interval(ms), default 0\n")
+    fmt.Printf("-l    :    log level, default DEBUG\n")
 
     fmt.Printf("for example:\n")
     fmt.Printf("./client -m testa -n 5 -t 1000\n")

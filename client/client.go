@@ -16,17 +16,28 @@ type Client struct {
     gate           *clientsdk.GateProxy
     fvc            msf.FlowVelocityCounter
     testCnt        int
+    interval       int
+    ordered        bool
 }
 
 func (c *Client) RpcCallTestA(cb clientsdk.CallBack) {
     TestService := c.gate.CreateServiceProxy(namespace, "ServiceA")
-    TestService.RpcCall("rpc_a", rand.Int31(), rand.Float32(), "abc", 
+    if c.ordered {
+        TestService.RpcCallOrdered("rpc_a", rand.Int31(), rand.Float32(), "abc", 
                         map[string]interface{}{"key1": rand.Int63(), "key2": "def"}, []int32{rand.Int31(), rand.Int31()}, cb)
+    } else {
+        TestService.RpcCall("rpc_a", rand.Int31(), rand.Float32(), "abc", 
+                        map[string]interface{}{"key1": rand.Int63(), "key2": "def"}, []int32{rand.Int31(), rand.Int31()}, cb)
+    }
 }
 
 func (c *Client) RpcCallTestB(cb clientsdk.CallBack) {
     TestService := c.gate.CreateServiceProxy(namespace, "ServiceA")
-    TestService.RpcCall("rpc_b", rand.Int31(), cb)
+    if c.ordered {
+        TestService.RpcCallOrdered("rpc_b", rand.Int31(), cb)
+    } else {
+        TestService.RpcCall("rpc_b", rand.Int31(), cb)
+    }
 }
 
 func (c *Client) RpcCallDBTest(cb clientsdk.CallBack) {
@@ -54,9 +65,9 @@ func (c *Client) StartTest(mode string, idx int) {
     callback := clientsdk.CallBack(func(err string, reply map[string]interface{}) {
             if err != "" {
                 msf.ERROR_LOG("[rpc call] - response: err(%v) reply(%v)", err, reply)
-                return
+            } else {
+                msf.DEBUG_LOG("[rpc call] - response: err(%v) reply(%v)", err, reply)
             }
-            msf.DEBUG_LOG("[rpc call] - response: err(%v) reply(%v)", err, reply)
             c.fvc.Count()
         })
 
@@ -68,6 +79,10 @@ func (c *Client) StartTest(mode string, idx int) {
             c.RpcCallTestB(callback)
         } else if "dbtest" == mode {
             c.RpcCallDBTest(callback)
+        }
+
+        if c.interval != 0 {
+            time.Sleep(time.Millisecond * time.Duration(c.interval))
         }
     }
 
@@ -112,7 +127,8 @@ var Port int = 8886
 
 func main() {
     var mode string = ""
-    var clientCnt, testCnt int = 0, 0
+    var clientCnt, testCnt, interval int = 0, 0, 0
+    var ordered bool = false
     var err error
 
     if len(os.Args) > 1 {
@@ -150,22 +166,39 @@ func main() {
                 if testCnt, err = strconv.Atoi(os.Args[idx]); err != nil {
                     panic(fmt.Sprintf("-t %v error, must be number", os.Args[idx]))
                 }
+
+            case "-i":
+                idx++
+                if interval, err = strconv.Atoi(os.Args[idx]); err != nil {
+                    panic(fmt.Sprintf("-i %v error, must be number", os.Args[idx]))
+                }
+
+            case "-o":
+                idx++
+                arg := os.Args[idx]
+                if arg == "true" {
+                    ordered = true
+                } else if arg == "false" {
+                    ordered = false
+                } else {
+                    panic(fmt.Sprintf("-o %v error, must be true/false", os.Args[idx]))
+                }
             }
         }
     } else {
         Usage()
     }
 
-    msf.INFO_LOG("client %s mode cnt %v, test cnt %v", mode, clientCnt, testCnt)
+    msf.INFO_LOG("client %s mode cnt %v, test cnt %v, interval %v", mode, clientCnt, testCnt, interval)
 
     if "pushtest" == mode  {
         for i := 0; i < clientCnt ; i++ {
-            c := Client{testCnt: testCnt}
+            c := Client{testCnt: testCnt, interval: interval, ordered: ordered}
             go c.StartPushTest(i)
         }
     } else {
         for i := 0; i < clientCnt ; i++ {
-            c := Client{testCnt: testCnt}
+            c := Client{testCnt: testCnt, interval: interval, ordered: ordered}
             go c.StartTest(mode, i)
         }
     }
@@ -181,12 +214,14 @@ func Usage() {
     fmt.Printf(fmt.Sprintf("-h    :    gate listen addr, default %s\n", IP))
     fmt.Printf(fmt.Sprintf("-p    :    gate listen port, default %d\n", Port))
     fmt.Printf("-m    :    test mode, must in [testa, testb, dbtest, pushtest]\n")
-    fmt.Printf("-n    :    client cnt(goroutine)\n")
-    fmt.Printf("-t    :    rpc test cnt\n\n")
+    fmt.Printf("-n    :    client cnt(goroutine), default 0\n")
+    fmt.Printf("-t    :    rpc test cnt, default 0\n")
+    fmt.Printf("-o    :    rpc test ordered, default false\n")
+    fmt.Printf("-i    :    rpc test interval(ms), default 0\n\n")
 
     fmt.Printf("for example:\n")
     fmt.Printf("./client -m testa -n 5 -t 1000\n")
-    fmt.Printf("./client -h 10.246.13.142 -p 8886 -m pushtest -n 1 -t 10\n")
+    fmt.Printf("./client -h 10.246.13.142 -p 8886 -m pushtest -n 1 -t 10 -i 1000 -o false\n")
     fmt.Printf("\n")
 
     os.Exit(0)

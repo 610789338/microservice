@@ -174,9 +174,11 @@ func (rmgr *SimpleRpcMgr) RpcDecode(session *Session, buf []byte) {
         return
     }
 
-    if rmgr.IsSync(rpcName) {
-        // TODO: 这里有阻塞的风险，应该专门开一个协程来处理，而不是放在tcp接收协程中
+    if rpcName == MSG_C2G_VERTIFY || rpcName == MSG_GATE_LOGIN {
         gTaskPool.ProduceTask(task)
+    } else if rpcName == MSG_G2S_RPC_CALL_ORDERED {
+        // 放在tcp接收协程中会阻塞，用单独协程来处理
+        gTaskPool.ProduceTaskSeparate(task)
     } else {
         go gTaskPool.ProduceTask(task)
     }

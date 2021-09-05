@@ -9,6 +9,7 @@ type TaskPool struct {
     size            int  // 本质上就是协程size
     opCh            chan string
     sizeCh          chan int
+    separateCh      chan func()
 }
 
 func (t *TaskPool) Start() {
@@ -27,6 +28,15 @@ func (t *TaskPool) Start() {
             case "get":
                 t.sizeCh <- t.size
             }
+        }
+    } ()
+
+    go func() {
+        for {
+            separate := <- t.separateCh
+            t.opCh <- "add"
+            separate()
+            t.opCh <- "del"
         }
     } ()
 }
@@ -53,6 +63,10 @@ func (t *TaskPool) ProduceTask(task func()) {
     task()
 }
 
+func (t *TaskPool) ProduceTaskSeparate(task func()) {
+    t.separateCh <- task
+}
+
 func (t *TaskPool) Size() int {
     t.opCh <- "get"
     size := <- t.sizeCh
@@ -62,7 +76,7 @@ func (t *TaskPool) Size() int {
 var gTaskPool *TaskPool = nil
 
 func StartTaskPool() {
-    gTaskPool = &TaskPool{opCh: make(chan string), sizeCh: make(chan int)}
+    gTaskPool = &TaskPool{opCh: make(chan string), sizeCh: make(chan int), separateCh: make(chan func())}
     gTaskPool.Start()
 }
 

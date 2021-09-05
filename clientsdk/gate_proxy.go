@@ -129,8 +129,16 @@ type ServiceProxy struct {
     ServiceName       string
 }
 
-// c2s的rpc调用，最后一个参数若是CallBack，则建立rid<->callback的缓存
 func (sp *ServiceProxy) RpcCall(rpcName string, args ...interface{}) {
+    sp._rpcCall(false, rpcName, args...)
+}
+
+func (sp *ServiceProxy) RpcCallOrdered(rpcName string, args ...interface{}) {
+    sp._rpcCall(true, rpcName, args...)
+}
+
+// c2s的rpc调用，最后一个参数若是CallBack，则建立rid<->callback的缓存
+func (sp *ServiceProxy) _rpcCall(ordered bool, rpcName string, args ...interface{}) {
 
     var rid uint32 = 0
     if len(args) > 0 {
@@ -155,9 +163,8 @@ func (sp *ServiceProxy) RpcCall(rpcName string, args ...interface{}) {
 
     // msf.DEBUG_LOG("rpc call %s args %v rid %d", rpcName, args, rid)
 
-    // TODO: 这个接口再封装一下
     innerRpc := msf.GetRpcMgr().RpcEncode(rpcName, args...)
-    sp.Gp.RpcCall(msf.MSG_C2G_RPC_ROUTE, sp.Namespace, sp.ServiceName, rid, true, innerRpc)
+    sp.Gp.RpcCall(msf.MSG_C2G_RPC_ROUTE, sp.Namespace, sp.ServiceName, rid, ordered, innerRpc)
 }
 
 // MSG_G2C_RPC_RSP

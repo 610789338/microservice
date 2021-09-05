@@ -153,6 +153,8 @@ func (s *TcpServer) onClientClose(c *TcpClient) {
 
     delete(s.clients, GetConnID(c.conn))
     s.lb.DelElement(string(GetConnID(c.conn)))
+    
+    DelRemoteOrderCache(GetConnID(c.conn))
 }
 
 func (c *TcpClient) HandleRead() {

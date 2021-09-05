@@ -249,9 +249,15 @@ func ChoiceRemote(remoteID REMOTE_ID, isOrdered bool, clientID CONN_ID) *Remote 
 }
 
 func ChioceRemoteFromOrderCache(remoteID REMOTE_ID, clientID CONN_ID) *Remote {
+    needUnlock := true
     remoteMgr.mutex.RLock()
-    defer remoteMgr.mutex.RUnlock()
+    defer func() {
+            if needUnlock {
+                remoteMgr.mutex.RUnlock()
+            }
+        } ()
 
+    // client connID: {remoteID: remote connID}
     cache, ok := remoteMgr.orderedCache[clientID]
     if !ok {
         return nil
@@ -265,6 +271,13 @@ func ChioceRemoteFromOrderCache(remoteID REMOTE_ID, clientID CONN_ID) *Remote {
 
     remote, ok := remoteMgr.remotes[connID]
     if !ok {
+        remoteMgr.mutex.RUnlock()
+        needUnlock = false
+
+        remoteMgr.mutex.Lock()
+        delete(cache, remoteID)
+        remoteMgr.mutex.Unlock()
+
         return nil
     }
 
@@ -275,7 +288,6 @@ func UpdateRemoteOrderCache(remoteID REMOTE_ID, clientID CONN_ID, connID CONN_ID
     remoteMgr.mutex.Lock()
     defer remoteMgr.mutex.Unlock()
 
-    // TODO: orderedCache size管理
     cache, ok := remoteMgr.orderedCache[clientID]
     if !ok {
         cache = make(map[REMOTE_ID]CONN_ID)
@@ -283,6 +295,13 @@ func UpdateRemoteOrderCache(remoteID REMOTE_ID, clientID CONN_ID, connID CONN_ID
     }
 
     cache[remoteID] = connID
+}
+
+func DelRemoteOrderCache(clientID CONN_ID) {
+    remoteMgr.mutex.Lock()
+    defer remoteMgr.mutex.Unlock()
+
+    delete(remoteMgr.orderedCache, clientID)
 }
 
 func GetRemote(connID CONN_ID) *Remote {

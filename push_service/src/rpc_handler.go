@@ -140,7 +140,7 @@ func (r *RpcPushRestoreHandler) Process(session *msf.Session) {
         return
     }
 
-    msf.DEBUG_LOG("[push restore] mongo docs %+v", len(docs))
+    msf.INFO_LOG("[push restore] clientID %v mongo docs %+v", r.req.ClientID, len(docs))
     for _, doc := range docs {
         // msf.DEBUG_LOG("[push restore] mongo doc %d, %+v", index, doc)
         objID := doc[0].Value.(primitive.ObjectID)

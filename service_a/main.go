@@ -24,7 +24,7 @@ func main(){
     msf.RegistRpcHandler("rpc_a",             func() msf.RpcHandler {return new(RpcAHandler)})
     msf.RegistRpcHandler("rpc_b",             func() msf.RpcHandler {return new(RpcBHandler)})
     msf.RegistRpcHandler("rpc_db_test",       func() msf.RpcHandler {return new(RpcDBTestHandler)})
-    msf.RegistRpcHandler("rpc_push_test",     func() msf.RpcHandler {return new(RpcPushTestHandler)})    
+    msf.RegistRpcHandler("rpc_push_test",     func() msf.RpcHandler {return new(RpcPushTestHandler)})
 
     msf.Start()
 }

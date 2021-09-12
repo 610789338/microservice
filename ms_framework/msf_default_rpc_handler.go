@@ -112,11 +112,11 @@ func (r *RpcG2SRpcCallHandler) rpcHandle(session *Session) (string, map[string]i
         }
 
         err := GetResponseErr(session)
-        INFO_LOG("[rpc call] - [%s] args[%v] err[%v] reply[%v]", rpcName, handler.GetReqPtr(), err, stMap)
+        DEBUG_LOG("[rpc call] - [%s] args[%v] err[%v] reply[%v]", rpcName, handler.GetReqPtr(), err, stMap)
         return err, stMap
     }
 
-    INFO_LOG("[rpc call] - [%s] args[%v] reply[nil]", rpcName, handler.GetReqPtr())
+    DEBUG_LOG("[rpc call] - [%s] args[%v] reply[nil]", rpcName, handler.GetReqPtr())
     return "", nil
 }
 

@@ -2,7 +2,7 @@
   "namespace": "YJ",
   "service": "ServiceA",
   "port": 6667,
-  "logLevel": "DEBUG",
+  "logLevel": "INFO",
   "etcd": ["127.0.0.1:2379"],
   "dbCfg": 
   [

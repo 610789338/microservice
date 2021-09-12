@@ -117,9 +117,14 @@ func (c *Client) StartPushTest(idx int) {
 
     for i := 0; i < c.testCnt; i++ {
         c.RpcCallPushTest(nil)
+        
+        if c.interval != 0 {
+            time.Sleep(time.Microsecond * time.Duration(c.interval))
+        }
     }
 
-    // c.gate.Logoff(fmt.Sprintf("client%d", idx))
+    time.Sleep(time.Second)
+    c.gate.Logoff(fmt.Sprintf("client%d", idx))
 }
 
 var IP = "127.0.0.1"
@@ -196,7 +201,7 @@ func main() {
 
     msf.SetLogLevel(logLevel)
 
-    msf.INFO_LOG("client %s mode cnt %v, test cnt %v, interval %v, logLevel %v", mode, clientCnt, testCnt, interval, logLevel)
+    msf.INFO_LOG("client %s mode %v client - [test cnt %v, interval %v] logLevel %v", mode, clientCnt, testCnt, interval, logLevel)
 
     if "pushtest" == mode  {
         for i := 0; i < clientCnt ; i++ {

@@ -71,11 +71,11 @@ func Init() {
 func Start() {
     StopRcpHandlerRegist()
 
-    StartTaskPool()
-    StartTcpServer()
-    StartEtcdDriver()
-    CreateDBResource()
     StartRpcFvc()
+    StartTaskPool()
+    CreateDBResource()
+    StartEtcdDriver()
+    StartTcpServer()
     StartBusi()
 
     INFO_LOG("****************** %s:%s start ok ******************", GlobalCfg.Namespace, GlobalCfg.Service)
@@ -93,9 +93,9 @@ func Start() {
 
 func Stop() {
     StopBusi()
-    StopRpcFvc()
-    ReleaseDBResource()
-    StopEtcdDriver()
     StopTcpServer()
+    StopEtcdDriver()
+    ReleaseDBResource()
     StopTaskPool()
+    StopRpcFvc()
 }

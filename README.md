@@ -21,13 +21,16 @@
 # 框架介绍 - msf_framework
 提供公共功能给微服务使用，几个关键的模块：
 * msf_tcp_server.go
+
    利用golang的协程实现的io多路复用，一个客户端连接对应一个golang协程处理网络包收发，负责应用层message的拆包粘包以及tcp连接的心跳管理
    message是CS单次通信的基础单位，格式是：4Byte长度 + rpcName + rpcArgs（用msgpack序列化）
 
 * msf_remote_mgr.go
+
    gate作为tcp client和每个service建立连接，通过remote_mgr来管理到tcp server的连接，负责应用层的拆包粘包
 
 * msf_simple_rpc.go
+
    简单rpc框架，服务间通信基石，message刨去长度信息就是rpc的内容，单条rpc请求的处理过程是：
    1、反序列化得到rpcName
    2、根据rpcName找到rpcHandler
@@ -37,6 +40,7 @@
    **参见rpc释义**
 
 * msf_callback_mgr.go
+
    异步应答管理，用于client->gate以及gate->service的异步请求应答：
    * 在client侧建立Rid<=>callack的映射关系，缓存在callback mgr中
    * 在gate侧建立GRid<=>(client, Rid)的映射关系，缓存在callback mgr中
@@ -44,54 +48,68 @@
    利用golang协程对每个callback做超时监控，若请求长时间未应答则触发超时应答，避免请求方阻塞
 
 * msf_load_balancer.go
+
    负载均衡管理器，提供多种负载均衡策略（暂时只有随机和轮询），目前用于c2s和s2s（见流程拆解）的负载均衡
 
 * msf_flow_velocity_counter.go
+
    流速统计器，目前用于统计client的请求速度以及gate和service的rpc处理速度
 
 * msf_xxx_driver.go
+
    第三方进程的clientsdk，目前支持etcd driver/redis driver/mongo driver
 
 
 # 部分rpc释义
 * MSG_C2G_RPC_ROUTE
+
    客户端到微服务的rpc请求路由，参数InnerRpc是业务层rpc序列化后的内容
    gate收到这条rpc后根据参数Namespace和ServiceName选择目标service，然后将InnerRpc和Rid打包成MSG_G2S_RPC_CALL发往目标service
 
 * MSG_G2S_RPC_CALL
+
    业务rpc请求，和MSG_C2G_RPC_ROUTE一样都是双层rpc结构，handler内部对参数InnerRpc反序列化，然后调用真正的业务层rpc
 
 * MSG_S2G_RPC_RSP
+
    service处理完rpc请求后给客户端的应答，通过gate将处理结果透传给client
 
 * MSG_G2C_RPC_RSP
+
    gate转发给client的rpc应答，client根据Rid调用对应的callback
 
 **以上4条rpc是c2s的全流程，详见流程拆解**
 
 * MSG_HEART_BEAT_REQ/MSG_HEART_BEAT_RSP
+
    tcp连接的心跳检测：
    若tcp client在10s内没有向tcp server发送数据包，则tcp server主动往tcp client发送MSG_HEART_BEAT_REQ，接着tcp client回应MSG_HEART_BEAT_RSP，连接保持
    若tcp client在20s内没有向tcp server发送数据包，则tcp server主动断开连接
 
 * MSG_C2G_AUTH
+
    client和gate的建立连接后的校验功能，对于部分不可信的client，gate要开启连接鉴权，并对rpc调用做权限管理
 
 * MSG_S2G_RPC_ACCESS_REPORT
+
    service向gate汇报接口访问权限，部分接口不允许外网网关调用
 
 
 **以下5条rpc和s2c流程有关，详见流程拆解**
 * MSG_GATE_LOGIN/MSG_GATE_LOGOFF
+
    这两条rpc是指游戏业务中玩家在微服务的登陆登出操作，主要用于微服务向玩家定点推送消息
 
 * MSG_P2G_REQ_LISTENADDR/MSG_G2P_RSP_LISTENADDR
+
    推送微服务请求gate的监听地址（监听地址作为gate的唯一标识）
 
 * MSG_S2P_PUSH/MSG_P2G_PUSH/MSG_G2C_PUSH
+
    s2c主流程相关的三条rpc
 
 * MSG_PUSH_REPLY/MSG_PUSH_RESTORE
+
    safe push相关的两条rpc，client收到推送消息后给予应答，以及推送目标上线后的推送消息恢复
 
 
@@ -185,35 +203,35 @@ service支持主动推送消息给client，由于gate有多份实例，所以需
 
 # 压力测试
 ### 压测环境（1台虚拟机）
-cpu - 4core(2.6GHz)
-内存 - 2G
+* cpu - 4core(2.6GHz)
+* 内存 - 2G
 
 ### c2s流程压测
-###### 压测步骤
+#### 压测步骤
 * 分别启动2个service， 1个gate
 * 启动client发起5条连接到gate（模拟多个客户端），每条连接不间断发送rpc请求，收到回应后计数一次，在client侧统计qps
+
 （主要统计空接口下整个集群c2s的qps，空接口是指rpc接口内部无任何逻辑）
 
-###### 压测结果
-qps在1.5w左右
-gate cpu占比150%左右，无内存膨胀现象
-service cpu占比80%左右，无内存膨胀现象
-client cpu占比100%左右，无内存膨胀现象
+#### 压测结果
+* qps在1.5w左右
+* gate cpu占比150%左右，无内存膨胀现象
+* service cpu占比80%左右，无内存膨胀现象
+* client cpu占比100%左右，无内存膨胀现象
 
-###### 压测结论
-不横向拓展集群实例的前提下，集群c2s的qps上限由ms_gate决定
-根据cpu占比换算，单个ms_gate独占4core cpu的情况下，集群c2s的qps在4w左右
+#### 压测结论
+* 不横向拓展集群实例的前提下，集群c2s的qps上限由ms_gate决定
+* 根据cpu占比换算，单个ms_gate独占4core cpu的情况下，集群c2s的qps在4w左右
 
 
 ### s2s流程压测
-压测步骤和c2s一样，但空接口内部加了s2s调用
-qps在6k左右，（1个rtt包含1个c2s操作 + 1个同步s2s操作）
-cpu占比最高是ms_gate，在120%左右，换算成独占4core后qps在2w左右
+* 压测步骤和c2s一样，但空接口内部加了s2s调用
+* qps在6k左右，（1个rtt包含1个c2s操作 + 1个同步s2s操作）
+   * cpu占比最高是ms_gate，在120%左右，换算成独占4core后qps在2w左右
 
 ### s2c流程压测
-启动两个push service其它步骤和c2s一样，但空接口内部加了push调用，在client侧统计push消息的qps
-safe push的qps在3k左右，1个safe push等于2个异步s2s操作 + 1个写mongo操作 + 1个读redis操作
-unsafe push的qps在8k左右，相较于safe push少了1个写mongo操作，可见磁盘io对qps影响较大
-
-safe push流程cpu占比最高的是mongod，达到120%左右，换算成独占4core后qps在1w左右
-unsafe push流程cpu占比最高的是push_service，达120%左右，换算成独占4core后qps在3.2w左右
+* 启动两个push service其它步骤和c2s一样，但空接口内部加了push调用，在client侧统计push消息的qps
+* safe push的qps在3k左右，1个safe push等于2个异步s2s操作 + 1个写mongo操作 + 1个读redis操作
+   * safe push流程cpu占比最高的是mongod，达到120%左右，换算成独占4core后qps在1w左右
+* unsafe push的qps在8k左右，相较于safe push少了1个写mongo操作，可见磁盘io对qps影响较大
+   * unsafe push流程cpu占比最高的是push_service，达120%左右，换算成独占4core后qps在3.2w左右

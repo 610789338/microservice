@@ -229,7 +229,7 @@ func Usage() {
 
     fmt.Printf("for example:\n")
     fmt.Printf("./client -m testa -n 5 -t 1000\n")
-    fmt.Printf("./client -h 10.246.13.142 -p 8886 -m pushtest -n 1 -t 10 -i 1000 -o false\n")
+    fmt.Printf("./client -h 10.246.13.142 -p 8886 -m pushtest -n 1 -t 10 -i 1000 -o false -l INFO\n")
     fmt.Printf("\n")
 
     os.Exit(0)

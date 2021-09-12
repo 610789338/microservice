@@ -183,3 +183,37 @@ service支持主动推送消息给client，由于gate有多份实例，所以需
 * service侧 - 对于有序请求，service从始至终采用独立的协程进行处理
 
 
+# 压力测试
+### 压测环境（1台虚拟机）
+cpu - 4core(2.6GHz)
+内存 - 2G
+
+### c2s流程压测
+###### 压测步骤
+* 分别启动2个service， 1个gate
+* 启动client发起5条连接到gate（模拟多个客户端），每条连接不间断发送rpc请求，收到回应后计数一次，在client侧统计qps
+（主要统计空接口下整个集群c2s的qps，空接口是指rpc接口内部无任何逻辑）
+
+###### 压测结果
+qps在1.5w左右
+gate cpu占比150%左右，无内存膨胀现象
+service cpu占比80%左右，无内存膨胀现象
+client cpu占比100%左右，无内存膨胀现象
+
+###### 压测结论
+不横向拓展集群实例的前提下，集群c2s的qps上限由ms_gate决定
+根据cpu占比换算，单个ms_gate独占4core cpu的情况下，集群c2s的qps在4w左右
+
+
+### s2s流程压测
+压测步骤和c2s一样，但空接口内部加了s2s调用
+qps在6k左右，（1个rtt包含1个c2s操作 + 1个同步s2s操作）
+cpu占比最高是ms_gate，在120%左右，换算成独占4core后qps在2w左右
+
+### s2c流程压测
+启动两个push service其它步骤和c2s一样，但空接口内部加了push调用，在client侧统计push消息的qps
+safe push的qps在3k左右，1个safe push等于2个异步s2s操作 + 1个写mongo操作 + 1个读redis操作
+unsafe push的qps在8k左右，相较于safe push少了1个写mongo操作，可见磁盘io对qps影响较大
+
+safe push流程cpu占比最高的是mongod，达到120%左右，换算成独占4core后qps在1w左右
+unsafe push流程cpu占比最高的是push_service，达120%左右，换算成独占4core后qps在3.2w左右

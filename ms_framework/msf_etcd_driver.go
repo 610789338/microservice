@@ -69,9 +69,10 @@ func (e *EtcdDriver) Stop() {
 
 func (e *EtcdDriver) LeaseWatch() {
 
+    timeCh := time.After(time.Second * 1)
+    
     go func() {
         for !e.exit {
-            timeCh := time.After(time.Second * 5)
             select {
             case <- timeCh:
                 ctx, cancelGet := context.WithTimeout(context.Background(), 5 * time.Second)
@@ -79,6 +80,8 @@ func (e *EtcdDriver) LeaseWatch() {
                 if err != nil {
                     ERROR_LOG(fmt.Sprintf("lease watch %s error %v", e.GenEtcdServiceKey(), err))
                     cancelGet()
+                    
+                    timeCh = time.After(time.Second * 1)
                     continue
                 }
 
@@ -87,8 +90,12 @@ func (e *EtcdDriver) LeaseWatch() {
                 if len(rsp.Kvs) == 0 {
                     INFO_LOG("etcd key %s lease invaild, retry regist", e.GenEtcdServiceKey())
                     e.ServiceRegist()
+
+                    timeCh = time.After(time.Second * 1)
+                    continue
                 }
                 
+                timeCh = time.After(time.Second * 5)
                 cancelGet()
             }
         }
@@ -105,7 +112,8 @@ func (e *EtcdDriver) ServiceRegist() {
     defer cancelGrant()
     lease, err := e.cli.Grant(ctx, 2)
     if err != nil {
-        panic(fmt.Sprintf("etcd grant error %v", err))
+        ERROR_LOG("etcd grant error %v", err)
+        return
     }
 
     e.lease = lease
@@ -114,16 +122,18 @@ func (e *EtcdDriver) ServiceRegist() {
     defer cancelPut()
     _, err = e.cli.Put(ctx, e.GenEtcdServiceKey(), e.GenEtcdServiceValue(), etcdctl.WithLease(e.lease.ID))
     if err != nil {
-        panic(fmt.Sprintf("etcd put error %v", err))
+        ERROR_LOG("etcd put error %v", err)
+        return
     }
 
     ch, err := e.cli.KeepAlive(context.TODO(), e.lease.ID)
     if err != nil {
-        panic(fmt.Sprintf("etcd keep alive error %v", err))
+        ERROR_LOG("etcd keep alive error %v", err)
+        return
     }
 
     ka := <-ch
-    INFO_LOG("etcd new lease id %v ttl %v", e.lease.ID, ka.TTL)
+    INFO_LOG("etcd new lease id %v ttl %+v", e.lease.ID, ka)
 }
 
 func (e *EtcdDriver) ServiceDiscover() {

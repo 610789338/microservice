@@ -33,7 +33,11 @@ type Remote struct {
 func (rmgr *RemoteMgr) OnRemoteDiscover(namespace string, svrName string, ip string, port uint32) {
 
     connID := GenConnIDByIPPort(ip, port)
+    
+    rmgr.mutex.RLock()
     _, ok := rmgr.remotes[connID]
+    rmgr.mutex.RUnlock()
+
     if ok {
         // WARN_LOG("remote %s:%s@%v already exist", namespace, svrName, connID)
 
@@ -87,6 +91,7 @@ func (rmgr *RemoteMgr) ConnectRemote(namespace string, svrName string, ip string
     _, ok := rmgr.remotes[connID]
     if ok {
         ERROR_LOG("repeate remote %s", connID)
+        c.Close()
         return nil
     }
 

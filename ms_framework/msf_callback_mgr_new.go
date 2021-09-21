@@ -116,7 +116,12 @@ func priorityQueueTick() {
         prev := cur.prev
 
         if cur.endTime <= now {
+            
+            cbMutex.Lock()
             _, ok := gCbMap[cur.cbid]
+            delete(gCbMap, cur.cbid)
+            cbMutex.Unlock()
+
             if ok {
                 ERROR_LOG("call back timeout %v", cur.cbid)
                 if cur.timeOutCb != nil {
@@ -124,9 +129,6 @@ func priorityQueueTick() {
                 }
             }
 
-            cbMutex.Lock()
-            delete(gCbMap, cur.cbid)
-            cbMutex.Unlock()
             queueDel(cur)
         } else {
             break

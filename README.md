@@ -235,3 +235,41 @@ service支持主动推送消息给client，由于gate有多份实例，所以需
    * safe push流程cpu占比最高的是mongod，达到120%左右，换算成独占4core后qps在1w左右
 * unsafe push的qps在8k左右，相较于safe push少了1个写mongo操作，可见磁盘io对qps影响较大
    * unsafe push流程cpu占比最高的是push_service，达120%左右，换算成独占4core后qps在3.2w左右
+
+### 压测环境搭建
+* 运行所需的环境上传到了docker hub，拉取docker镜像并启动容器
+
+   docker pull yj610789338/ms:ms_all
+   
+   docker container run -it yj610789338/ms:ms_all /bin/bash
+
+* 此时应该在docker容器中，初始化环境
+
+   source init_env.sh（创建redis cluster的时候手动输入yes）
+
+* 编译微服务
+
+   cd ~/microservice;./build_all.sh
+
+* 启动db
+
+   cd;./start-all-db.sh
+
+* 启动service和gate
+
+   cd ~/microservice/service_a
+   
+   nohup ./service_a -c config.json &
+
+
+   cd ~/microservice/ms_gate/bin
+   
+   nohup ./ms_gate -c config.json &
+
+* 跑测试用例
+
+   cd ~/microservice/client
+
+   ./client --help可以看usage，比如跑空接口的压测用例：
+
+   ./client -m testb -n 5 -t 10000000 -i 70 -l INFO

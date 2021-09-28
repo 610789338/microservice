@@ -32,10 +32,15 @@
 * msf_simple_rpc.go
 
    简单rpc框架，服务间通信基石，message刨去长度信息就是rpc的内容，单条rpc请求的处理过程是：
+   
    1、反序列化得到rpcName
+   
    2、根据rpcName找到rpcHandler
+   
    3、利用golang的reflect+struct来反序列化rpcArgs
+   
    4、根据rpcName和rpcArgs进行process
+   
    每个rpc请求新起一个协程来处理，协程数量就是正在处理的rpc数量
    **参见rpc释义**
 

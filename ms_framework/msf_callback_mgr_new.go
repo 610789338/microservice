@@ -138,7 +138,7 @@ func priorityQueueTick() {
     }
     
     if gPriorityQueue.size != 0 {
-        INFO_LOG("[PriorityQueue] size %v", gPriorityQueue.size)   
+        INFO_LOG("[callback queue] size %v", gPriorityQueue.size)   
     }
 }
 

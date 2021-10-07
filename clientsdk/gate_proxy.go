@@ -84,7 +84,11 @@ func (g *GateProxy) Logoff(clientID string) {
 func (g *GateProxy) RpcCall(rpcName string, args ...interface{}) {
     rpc := msf.GetRpcMgr().RpcEncode(rpcName, args...)
     msg := msf.GetRpcMgr().MessageEncode(rpc)
+
     msf.MessageSend(g.conn, msg)
+    // msf.MessageSend(g.conn, msg[0:1])
+    // msf.MessageSend(g.conn, msg[1:5])
+    // msf.MessageSend(g.conn, msg[5:])
 }
 
 func (g *GateProxy) Turn2Session() *msf.Session {

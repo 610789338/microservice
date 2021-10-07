@@ -112,13 +112,13 @@ func (rmgr *SimpleRpcMgr) MessageDecode(session *Session, msg []byte) uint32 {
 
     for offset < bufLen {
         if bufLen - offset < MESSAGE_SIZE_LEN {
-            DEBUG_LOG("remain len(%d) < MESSAGE_SIZE_LEN(%d)", bufLen - offset, MESSAGE_SIZE_LEN)
+            WARN_LOG("remain len(%d) < MESSAGE_SIZE_LEN(%d)", bufLen - offset, MESSAGE_SIZE_LEN)
             break
         }
 
         pkgLen := ReadPacketLen(msg[offset:])
         if bufLen - offset < MESSAGE_SIZE_LEN + pkgLen {
-            DEBUG_LOG("remain len(%d) < MESSAGE_SIZE_LEN(%d) + pkgLen(%d)", bufLen - offset, MESSAGE_SIZE_LEN, pkgLen)
+            WARN_LOG("remain len(%d) < MESSAGE_SIZE_LEN(%d) + pkgLen(%d)", bufLen - offset, MESSAGE_SIZE_LEN, pkgLen)
             break
         }
 
@@ -175,12 +175,14 @@ func (rmgr *SimpleRpcMgr) RpcDecode(session *Session, buf []byte) {
     }
 
     if rpcName == MSG_C2G_VERTIFY || rpcName == MSG_GATE_LOGIN {
-        gTaskPool.ProduceTask(task)
+        // 这两条要优先同步处理，否则后续rpc请求会被当成非法请求
+        task()
     } else if rpcName == MSG_G2S_RPC_CALL_ORDERED {
-        // 放在tcp接收协程中会阻塞，用单独协程来处理
+        // 保序请求 - 同步处理会阻塞，用单独协程来处理
         gTaskPool.ProduceTaskSeparate(task)
     } else {
-        go gTaskPool.ProduceTask(task)
+        // 丢进task pool
+        gTaskPool.ProduceTask(task)
     }
 }
 

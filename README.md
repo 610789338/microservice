@@ -41,7 +41,7 @@
    
    4、根据rpcName和rpcArgs进行process
    
-   每个rpc请求新起一个协程来处理，协程数量就是正在处理的rpc数量
+   利用协程池和golang的管道来处理rpc请求
    **参见rpc释义**
 
 * msf_callback_mgr.go

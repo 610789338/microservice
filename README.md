@@ -50,7 +50,7 @@
    * 在client侧建立Rid<=>callack的映射关系，缓存在callback mgr中
    * 在gate侧建立GRid<=>(client, Rid)的映射关系，缓存在callback mgr中
 
-   利用golang协程对每个callback做超时监控，若请求长时间未应答则触发超时应答，避免请求方阻塞
+   每个callback都有超时时间，根据超时时间将callback排序插入优先队列，定时检查优先队列处理超时应答，避免请求方阻塞
 
 * msf_load_balancer.go
 
